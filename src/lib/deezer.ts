@@ -1,0 +1,105 @@
+// Acceso a la API pública de Deezer (solo desde el servidor: Deezer no permite CORS).
+const API = "https://api.deezer.com";
+
+export type SourceType = "genre" | "playlist" | "artist";
+
+export type DzTrack = {
+  id: number;
+  title: string;
+  title_short?: string;
+  preview: string;
+  link: string;
+  artist: { id: number; name: string };
+  album?: { cover_medium?: string; cover_big?: string };
+};
+
+async function dz<T>(path: string, revalidate = 3600): Promise<T> {
+  const res = await fetch(`${API}${path}`, { next: { revalidate } });
+  if (!res.ok) throw new Error(`Deezer respondió ${res.status}`);
+  const json = await res.json();
+  if (json?.error) throw new Error(json.error.message ?? "Error de Deezer");
+  return json as T;
+}
+
+export async function getGenres() {
+  const r = await dz<{ data: { id: number; name: string; picture_medium: string }[] }>("/genre", 86400);
+  return r.data
+    .filter((g) => g.id !== 0)
+    .map((g) => ({ id: String(g.id), name: g.name, picture: g.picture_medium }));
+}
+
+export async function search(type: "artist" | "playlist", q: string) {
+  const path = `/search/${type}?q=${encodeURIComponent(q)}&limit=12`;
+  if (type === "artist") {
+    const r = await dz<{ data: { id: number; name: string; picture_medium: string; nb_fan: number }[] }>(path, 600);
+    return r.data.map((a) => ({ id: String(a.id), name: a.name, picture: a.picture_medium, extra: `${a.nb_fan.toLocaleString("es-CO")} fans` }));
+  }
+  const r = await dz<{ data: { id: number; title: string; picture_medium: string; nb_tracks: number; user?: { name: string } }[] }>(path, 600);
+  return r.data.map((p) => ({ id: String(p.id), name: p.title, picture: p.picture_medium, extra: `${p.nb_tracks} canciones · ${p.user?.name ?? ""}` }));
+}
+
+// Trae las canciones de la fuente. El caché es corto porque los enlaces de los fragmentos vencen.
+export async function getTracks(type: SourceType, id: string): Promise<DzTrack[]> {
+  if (!/^\d+$/.test(id)) throw new Error("ID no válido");
+  let path: string;
+  if (type === "genre") path = `/chart/${id}/tracks?limit=100`;
+  else if (type === "artist") path = `/artist/${id}/top?limit=100`;
+  else path = `/playlist/${id}/tracks?limit=200`;
+  const r = await dz<{ data: DzTrack[] }>(path, 300);
+  return r.data ?? [];
+}
+
+const norm = (s: string) =>
+  s.toLowerCase().replace(/\s*[\(\[].*?[\)\]]/g, "").replace(/\s+-\s+.*$/, "").trim();
+
+function shuffle<T>(a: T[]): T[] {
+  const b = [...a];
+  for (let i = b.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [b[i], b[j]] = [b[j], b[i]];
+  }
+  return b;
+}
+
+export type BuiltRound = {
+  preview_url: string;
+  options: { title: string; artist: string }[];
+  correct_index: number;
+  answer: { title: string; artist: string; cover: string; link: string };
+};
+
+// Arma las rondas: una canción correcta + 3 opciones falsas de la misma fuente.
+export function buildRounds(tracks: DzTrack[], count: number): BuiltRound[] {
+  const seen = new Set<string>();
+  const pool = tracks.filter((t) => {
+    if (!t.preview) return false;
+    const k = norm(t.title_short || t.title);
+    if (!k || seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  if (pool.length < 4) throw new Error("Esta fuente no tiene suficientes canciones con fragmento (mínimo 4).");
+
+  const picked = shuffle(pool).slice(0, Math.min(count, pool.length));
+  return picked.map((t) => {
+    const fakes = shuffle(pool.filter((x) => x.id !== t.id)).slice(0, 3);
+    const options = shuffle([t, ...fakes]);
+    return {
+      preview_url: t.preview,
+      options: options.map((o) => ({ title: o.title_short || o.title, artist: o.artist.name })),
+      correct_index: options.findIndex((o) => o.id === t.id),
+      answer: {
+        title: t.title_short || t.title,
+        artist: t.artist.name,
+        cover: t.album?.cover_big ?? t.album?.cover_medium ?? "",
+        link: t.link,
+      },
+    };
+  });
+}
+
+// Acepta un enlace de playlist de Deezer y devuelve su ID
+export function playlistIdFromUrl(input: string): string | null {
+  const m = input.match(/deezer\.com\/(?:[a-z]{2}\/)?playlist\/(\d+)/i);
+  return m ? m[1] : null;
+}
