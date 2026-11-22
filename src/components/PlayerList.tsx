@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useRef, useState } from "react";
 import type { Player } from "@/lib/supabase";
+import { Crown, Flame } from "./ui/Icons";
 
 // Tabla de jugadores. Con showScore se ordena por puntaje y anima los cambios de puesto.
 export default function PlayerList({
@@ -45,9 +46,9 @@ export default function PlayerList({
   }, [order]);
 
   return (
-    <div className="card p-4">
-      <h3 className="mb-3 text-sm font-semibold text-muted">Jugadores ({players.length}/12)</h3>
-      <ul className="flex flex-col gap-1.5">
+    <div className="panel p-4">
+      <h3 className="display mb-3 text-xl">Jugadores <span className="tabular text-muted">{players.length}/12</span></h3>
+      <ul className="flex flex-col gap-2">
         {list.map((p, i) => {
           const move = moves[p.id];
           return (
@@ -57,26 +58,26 @@ export default function PlayerList({
                 if (el) rows.current.set(p.id, el);
                 else rows.current.delete(p.id);
               }}
-              className={`relative flex items-center gap-3 rounded-lg px-3 py-2 ${p.id === meId ? "bg-brand/15" : "bg-white/[.03]"}`}
+              className={`relative flex items-center gap-3 rounded-xl border-2 px-3 py-2 ${p.id === meId ? "border-ink bg-sun" : "border-fog bg-paper"}`}
             >
-              {showScore && <span className="tabular w-5 text-sm text-muted">{i + 1}</span>}
-              <span className="min-w-0 flex-1 truncate">
-                {p.nickname}
-                {p.id === hostId && <span className="ml-1.5 text-xs text-amber-300" title="Anfitrión">★</span>}
-                {p.id === meId && <span className="ml-1.5 text-xs text-muted">(tú)</span>}
+              {showScore && <span className="display tabular w-6 text-lg">{i + 1}</span>}
+              <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate font-extrabold">
+                <span className="truncate">{p.nickname}</span>
+                {p.id === hostId && <span className={p.id === meId ? "text-ink" : "text-tangerine"} title="Anfitrión"><Crown /></span>}
+                {p.id === meId && <span className="text-xs font-black text-ink/70">tú</span>}
               </span>
               {move !== undefined && (
-                <span className={`animate-pop text-xs font-bold ${move > 0 ? "text-emerald-300" : "text-rose-300"}`}>
+                <span className={`animate-pop rounded-md px-1.5 text-xs font-black text-paper ${move > 0 ? "bg-ok" : "bg-bad"}`}>
                   {move > 0 ? `▲${move}` : `▼${-move}`}
                 </span>
               )}
               {showScore && p.streak >= 2 && (
-                <span className="text-xs font-bold text-orange-300" title={`${p.streak} aciertos seguidos`}>🔥{p.streak}</span>
+                <span className={`flex items-center gap-0.5 text-sm font-black ${p.id === meId ? "text-ink" : "text-tangerine"}`} title={`${p.streak} aciertos seguidos`}><Flame />{p.streak}</span>
               )}
               {answeredRound !== undefined && p.answered_round === answeredRound && (
-                <span className="text-xs text-emerald-300">respondió</span>
+                <span className="rounded-md bg-ok px-1.5 text-xs font-black text-paper">listo</span>
               )}
-              {showScore && <span className="tabular font-semibold">{p.score}</span>}
+              {showScore && <span className="display tabular text-lg">{p.score}</span>}
             </li>
           );
         })}

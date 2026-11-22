@@ -8,6 +8,7 @@ import { clearSession, saveNickname, saveSession, useHydrated, useSession, useSt
 import Lobby from "./Lobby";
 import Game from "./Game";
 import Results from "./Results";
+import Logo from "./ui/Logo";
 
 type RoomState = { room: Room | null; players: Player[]; round: Round | null };
 
@@ -96,13 +97,13 @@ export default function RoomClient({ code }: { code: string }) {
   }
 
   if (room === undefined || !checked) {
-    return <Centered><p className="text-muted">Cargando sala…</p></Centered>;
+    return <Centered><p className="display text-2xl">Cargando sala…</p></Centered>;
   }
   if (room === null) {
     return (
       <Centered>
-        <h1 className="text-2xl font-bold">No encontramos la sala {code}</h1>
-        <p className="text-muted">Revisa el código o crea una nueva.</p>
+        <h1 className="display text-4xl">No existe la sala {code}</h1>
+        <p className="font-bold text-paper/80">Revisa el código con quien te invitó, o crea una sala nueva.</p>
         <Link href="/" className="btn-primary">Volver al inicio</Link>
       </Centered>
     );
@@ -117,12 +118,10 @@ export default function RoomClient({ code }: { code: string }) {
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6 sm:py-10">
       <nav className="flex items-center justify-between">
-        <Link href="/" className="text-lg font-black">
-          Juego<span className="bg-linear-to-r from-brand to-brand-2 bg-clip-text text-transparent">Musical</span>
-        </Link>
-        <div className="flex items-center gap-3 text-sm">
-          <span className="rounded-lg border border-line px-3 py-1 font-mono tracking-widest">{room.code}</span>
-          <button onClick={leave} className="text-muted hover:text-white">Salir</button>
+        <Logo />
+        <div className="flex items-center gap-3">
+          <span className="chip display text-lg tracking-widest" aria-label={`Código de sala ${room.code}`}>{room.code}</span>
+          <button onClick={leave} className="font-extrabold text-paper/80 hover:text-paper hover:underline">Salir</button>
         </div>
       </nav>
 
@@ -161,11 +160,11 @@ function JoinPrompt({ code, onJoined }: { code: string; onJoined: (s: Session) =
 
   return (
     <Centered>
-      <form onSubmit={join} className="card w-full max-w-sm p-6 text-left">
-        <h1 className="mb-1 text-xl font-bold">Entrar a la sala <span className="font-mono">{code}</span></h1>
-        <p className="mb-4 text-sm text-muted">Elige cómo te verán los demás.</p>
+      <form onSubmit={join} className="panel w-full max-w-sm p-6 text-left">
+        <h1 className="display mb-1 text-3xl">Sala {code}</h1>
+        <p className="mb-4 font-bold text-muted">Escribe tu apodo para entrar.</p>
         <input className="input" maxLength={20} placeholder="Tu apodo" value={nick} onChange={(e) => setNick(e.target.value)} autoFocus />
-        {error && <p className="mt-3 text-sm text-red-300" role="alert">{error}</p>}
+        {error && <p className="mt-3 text-sm font-bold text-bad" role="alert">{error}</p>}
         <button className="btn-primary mt-4 w-full" disabled={busy}>{busy ? "Entrando…" : "Entrar"}</button>
       </form>
     </Centered>

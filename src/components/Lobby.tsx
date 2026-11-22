@@ -30,23 +30,22 @@ export default function Lobby({ room, players, session, isHost }: { room: Room; 
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-      <section className="card p-6">
+      <section className="panel p-5 sm:p-6">
         {isHost ? (
           <HostSetup session={session} playersCount={players.length} />
         ) : (
-          <div className="flex min-h-64 flex-col items-center justify-center gap-4 text-center">
-            <div className="eq" aria-hidden><span /><span /><span /><span /><span /></div>
-            <h2 className="text-xl font-bold">Esperando a que {host?.nickname ?? "el anfitrión"} elija la música…</h2>
-            <p className="text-muted">La partida empieza cuando el anfitrión la inicie.</p>
+          <div className="flex min-h-64 flex-col items-center justify-center gap-3 text-center">
+            <h2 className="display text-3xl">{host?.nickname ?? "El anfitrión"} está eligiendo la música</h2>
+            <p className="font-bold text-muted">La partida arranca sola cuando la inicie. Mientras tanto, comparte el código.</p>
           </div>
         )}
       </section>
 
       <aside className="flex flex-col gap-4">
-        <div className="card p-5 text-center">
-          <p className="text-sm text-muted">Código de la sala</p>
-          <p className="my-2 font-mono text-4xl font-black tracking-[.25em]">{room.code}</p>
-          <button className="btn-ghost w-full py-2 text-sm" onClick={copyLink}>{copied ? "¡Enlace copiado!" : "Copiar enlace de invitación"}</button>
+        <div className="panel bg-sun! p-5 text-center">
+          <p className="font-extrabold">Código para entrar</p>
+          <p className="display my-1 text-5xl tracking-[.18em]">{room.code}</p>
+          <button className="btn-ghost w-full py-2" onClick={copyLink}>{copied ? "Enlace copiado" : "Copiar enlace de invitación"}</button>
         </div>
         <PlayerList players={players} hostId={room.host_player_id} meId={session.player_id} />
       </aside>
@@ -83,8 +82,8 @@ function HostSetup({ session, playersCount }: { session: Session; playersCount: 
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <h2 className="text-xl font-bold">Elige la música</h2>
-        <p className="text-sm text-muted">Eres el anfitrión. {playersCount === 1 ? "Puedes jugar solo o esperar a tus amigos." : `${playersCount} jugadores listos.`}</p>
+        <h2 className="display text-3xl">Elige la música</h2>
+        <p className="font-bold text-muted">{playersCount === 1 ? "Puedes jugar solo o esperar a que entren tus amigos." : `${playersCount} jugadores en la sala.`}</p>
       </div>
 
       <div className="grid grid-cols-3 gap-2" role="tablist">
@@ -94,10 +93,10 @@ function HostSetup({ session, playersCount }: { session: Session; playersCount: 
             role="tab"
             aria-selected={mode === m.id}
             onClick={() => { setMode(m.id); setSelected(null); }}
-            className={`rounded-xl border px-3 py-3 text-left transition ${mode === m.id ? "border-brand bg-brand/15" : "border-line hover:bg-white/5"}`}
+            className={`rounded-xl border-[3px] border-ink px-3 py-3 text-left transition-[transform,box-shadow] duration-75 ${mode === m.id ? "translate-y-[3px] bg-stage text-paper shadow-[0_1px_0_var(--color-ink)]" : "bg-paper shadow-[0_4px_0_var(--color-ink)] hover:bg-fog"}`}
           >
-            <span className="block font-semibold">{m.label}</span>
-            <span className="hidden text-xs text-muted sm:block">{m.hint}</span>
+            <span className="display block text-lg">{m.label}</span>
+            <span className={`hidden text-xs font-bold sm:block ${mode === m.id ? "text-paper/80" : "text-muted"}`}>{m.hint}</span>
           </button>
         ))}
       </div>
@@ -107,22 +106,22 @@ function HostSetup({ session, playersCount }: { session: Session; playersCount: 
       {mode === "artist" && <SearchPicker key="artist" type="artist" ideas={ARTIST_IDEAS} selected={selected} onSelect={setSelected} />}
 
       <div className="grid grid-cols-2 gap-3">
-        <label className="text-sm text-muted">Rondas
+        <label className="font-extrabold">Rondas
           <select className="input mt-1" value={rounds} onChange={(e) => setRounds(Number(e.target.value))}>
             {[5, 10, 15, 20].map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
         </label>
-        <label className="text-sm text-muted">Segundos por ronda
+        <label className="font-extrabold">Segundos por ronda
           <select className="input mt-1" value={seconds} onChange={(e) => setSeconds(Number(e.target.value))}>
             {[10, 15, 20, 30].map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
         </label>
       </div>
 
-      {error && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300" role="alert">{error}</p>}
+      {error && <p className="rounded-xl border-2 border-bad bg-bad/10 px-3 py-2 text-sm font-bold text-bad" role="alert">{error}</p>}
 
-      <button className="btn-primary py-4 text-lg" disabled={!selected || starting} onClick={start}>
-        {starting ? "Preparando canciones…" : selected ? `Iniciar con «${selected.name}»` : "Elige una opción para empezar"}
+      <button className="btn-primary py-4 text-xl" disabled={!selected || starting} onClick={start}>
+        {starting ? "Preparando canciones…" : selected ? `Empezar con ${selected.name}` : "Elige qué música suena"}
       </button>
     </div>
   );
@@ -132,13 +131,13 @@ function ItemCard({ item, active, onClick }: { item: Item; active: boolean; onCl
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-3 rounded-xl border p-2 text-left transition ${active ? "border-brand bg-brand/15" : "border-line hover:bg-white/5"}`}
+      className={`flex items-center gap-3 rounded-xl border-[3px] p-2 text-left transition-colors ${active ? "border-ink bg-sun" : "border-fog bg-paper hover:border-ink"}`}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={item.picture} alt="" className="size-12 shrink-0 rounded-lg object-cover" loading="lazy" />
+      <img src={item.picture} alt="" className="size-12 shrink-0 rounded-lg border-2 border-ink object-cover" loading="lazy" />
       <span className="min-w-0">
-        <span className="block truncate font-medium">{item.name}</span>
-        {item.extra && <span className="block truncate text-xs text-muted">{item.extra}</span>}
+        <span className="block truncate font-extrabold">{item.name}</span>
+        {item.extra && <span className="block truncate text-xs font-bold text-muted">{item.extra}</span>}
       </span>
     </button>
   );
@@ -153,8 +152,8 @@ function GenrePicker({ selected, onSelect }: { selected: Item | null; onSelect: 
       .then((j) => (j.error ? setError(j.error) : setGenres(j.data)))
       .catch(() => setError("No se pudieron cargar los géneros"));
   }, []);
-  if (error) return <p className="text-sm text-red-300">{error}</p>;
-  if (!genres) return <p className="text-sm text-muted">Cargando géneros…</p>;
+  if (error) return <p className="text-sm font-bold text-bad">{error}</p>;
+  if (!genres) return <p className="font-bold text-muted">Cargando géneros…</p>;
   return (
     <div className="grid max-h-80 grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3">
       {genres.map((g) => <ItemCard key={g.id} item={g} active={selected?.id === g.id} onClick={() => onSelect(g)} />)}
@@ -205,20 +204,20 @@ function SearchPicker({ type, ideas, selected, onSelect }: { type: "playlist" | 
       </form>
       <div className="flex flex-wrap gap-2">
         {ideas.map((i) => (
-          <button key={i} className="rounded-full border border-line px-3 py-1 text-sm text-muted hover:bg-white/5 hover:text-white" onClick={() => { setQ(i); run(i); }}>
+          <button key={i} className="rounded-full border-2 border-ink bg-fog px-3 py-1 text-sm font-extrabold hover:bg-sun" onClick={() => { setQ(i); run(i); }}>
             {i}
           </button>
         ))}
       </div>
-      {error && <p className="text-sm text-red-300">{error}</p>}
-      {results && results.length === 0 && !selected && <p className="text-sm text-muted">Sin resultados.</p>}
+      {error && <p className="text-sm font-bold text-bad">{error}</p>}
+      {results && results.length === 0 && !selected && <p className="font-bold text-muted">Nada con ese nombre. Prueba otra búsqueda.</p>}
       {results && results.length > 0 && (
         <div className="grid max-h-80 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
           {results.map((r) => <ItemCard key={r.id} item={r} active={selected?.id === r.id} onClick={() => onSelect(r)} />)}
         </div>
       )}
       {selected && !results?.some((r) => r.id === selected.id) && (
-        <p className="text-sm text-muted">Seleccionado: <span className="text-white">{selected.name}</span></p>
+        <p className="font-bold text-muted">Elegiste: <span className="text-ink">{selected.name}</span></p>
       )}
     </div>
   );
