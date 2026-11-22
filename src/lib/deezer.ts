@@ -61,6 +61,23 @@ function shuffle<T>(a: T[]): T[] {
   return b;
 }
 
+// "ESTOY PUTIAO" -> "Estoy Putiao". Se respetan siglas cortas de una palabra (PPCP) y números romanos.
+export function tidyTitle(raw: string): string {
+  const t = raw.trim();
+  const letters = t.replace(/[^\p{L}]/gu, "");
+  if (letters.length < 2 || letters !== letters.toUpperCase()) return t;
+  const words = t.split(/\s+/);
+  if (words.length === 1 && letters.length <= 4) return t;
+  return words
+    .map((w) => {
+      if (/^[IVX]+$/.test(w) || /^\d/.test(w)) return w;
+      const lower = w.toLocaleLowerCase("es");
+      const i = lower.search(/\p{L}/u);
+      return i < 0 ? lower : lower.slice(0, i) + lower.charAt(i).toLocaleUpperCase("es") + lower.slice(i + 1);
+    })
+    .join(" ");
+}
+
 export type BuiltRound = {
   preview_url: string;
   options: { title: string; artist: string }[];
@@ -86,10 +103,10 @@ export function buildRounds(tracks: DzTrack[], count: number): BuiltRound[] {
     const options = shuffle([t, ...fakes]);
     return {
       preview_url: t.preview,
-      options: options.map((o) => ({ title: o.title_short || o.title, artist: o.artist.name })),
+      options: options.map((o) => ({ title: tidyTitle(o.title_short || o.title), artist: o.artist.name })),
       correct_index: options.findIndex((o) => o.id === t.id),
       answer: {
-        title: t.title_short || t.title,
+        title: tidyTitle(t.title_short || t.title),
         artist: t.artist.name,
         cover: t.album?.cover_big ?? t.album?.cover_medium ?? "",
         link: t.link,

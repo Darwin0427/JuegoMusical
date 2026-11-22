@@ -31,6 +31,11 @@ export type Player = {
   score: number;
   answered_round: number;
   joined_at: string;
+  streak: number;
+  best_streak: number;
+  correct_count: number;
+  answered_count: number;
+  total_ms: number;
 };
 
 export type Option = { title: string; artist: string };
@@ -48,4 +53,4 @@ export type Round = {
   answer: { title: string; artist: string; cover: string; link: string } | null;
 };
 
-export type RoundResult = { player_id: string; choice: number; is_correct: boolean; points: number; time_ms: number };
+export type RoundResult = { player_id: string; choice: number; is_correct: boolean; points: number; bonus: number; time_ms: number };

@@ -11,6 +11,7 @@ export function useGameAudio(url: string) {
   const connected = useRef<WeakSet<HTMLAudioElement>>(new WeakSet());
   const analyserRef = useRef<AnalyserNode | null>(null);
   const corsBroken = useRef(false);
+  const volumeRef = useRef(0.8);
   const [needsTap, setNeedsTap] = useState(false);
 
   useEffect(() => {
@@ -29,6 +30,7 @@ export function useGameAudio(url: string) {
         corsBroken.current = true;
         const b = new Audio();
         b.preload = "auto";
+        b.volume = volumeRef.current;
         b.src = url;
         b.load();
         audioRef.current = b;
@@ -64,6 +66,7 @@ export function useGameAudio(url: string) {
     (fromSeconds: number) => {
       const a = audioRef.current;
       if (!a || !a.paused) return;
+      a.volume = volumeRef.current;
       if (fromSeconds > 0 && fromSeconds < 29) {
         try {
           a.currentTime = fromSeconds;
@@ -82,6 +85,7 @@ export function useGameAudio(url: string) {
 
   const pause = useCallback(() => audioRef.current?.pause(), []);
   const setVolume = useCallback((v: number) => {
+    volumeRef.current = v;
     if (audioRef.current) audioRef.current.volume = v;
   }, []);
 

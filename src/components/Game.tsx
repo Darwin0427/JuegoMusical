@@ -7,6 +7,9 @@ import PlayerList from "./PlayerList";
 import TimerRing from "./TimerRing";
 import Equalizer from "./Equalizer";
 import { useGameAudio } from "./useGameAudio";
+import SoloStats from "./SoloStats";
+import { useSfx, useVolume } from "@/lib/prefs";
+import { playSfx } from "@/lib/sfx";
 
 const REVEAL_MS = 5000;
 
@@ -28,7 +31,16 @@ export default function Game({
   const [error, setError] = useState<{ round: string; msg: string } | null>(null);
   const [results, setResults] = useState<{ round: string; list: RoundResult[] } | null>(null);
   const lastAdvance = useRef(0);
-  const { play, pause, needsTap, analyserRef } = useGameAudio(round.preview_url);
+  const { play, pause, setVolume, needsTap, analyserRef } = useGameAudio(round.preview_url);
+  const [volume, saveVolume] = useVolume();
+  const [sfxOn, saveSfx] = useSfx();
+  const lastVolume = useRef(0.8);
+  const sfxPlayed = useRef<string | null>(null);
+
+  useEffect(() => {
+    setVolume(volume);
+    if (volume > 0) lastVolume.current = volume;
+  }, [volume, setVolume, round.id]);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now() + offset), 100);
@@ -70,6 +82,16 @@ export default function Game({
     return () => clearTimeout(t);
   }, [phase, round.id, pause]);
 
+  // Efecto de sonido al revelar (una vez por ronda)
+  useEffect(() => {
+    if (!roundResults || sfxPlayed.current === round.id) return;
+    sfxPlayed.current = round.id;
+    if (!sfxOn) return;
+    const r = roundResults.find((x) => x.player_id === session.player_id);
+    if (!r) return;
+    playSfx(r.is_correct ? (r.bonus > 0 ? "streak" : "correct") : "wrong", volume);
+  }, [roundResults, round.id, sfxOn, session.player_id, volume]);
+
   const answer = useCallback(
     async (i: number) => {
       if (mine || phase !== "playing") return;
@@ -110,9 +132,32 @@ export default function Game({
         )}
 
         <div className="relative flex flex-col gap-6">
-          <header className="flex items-center justify-between text-sm text-muted">
-            <span>Ronda <b className="tabular text-white">{room.current_round}</b> de {room.total_rounds}</span>
-            <span className="truncate pl-3">{room.source_label}</span>
+          <header className="flex items-center justify-between gap-3 text-sm text-muted">
+            <span className="shrink-0">Ronda <b className="tabular text-white">{room.current_round}</b> de {room.total_rounds}</span>
+            <span className="hidden min-w-0 truncate sm:block">{room.source_label}</span>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                onClick={() => saveVolume(volume > 0 ? 0 : lastVolume.current)}
+                className="grid size-8 place-items-center rounded-lg hover:bg-white/10"
+                aria-label={volume > 0 ? "Silenciar música" : "Activar música"}
+                title="Volumen de la música"
+              >
+                {volume === 0 ? "🔇" : volume < 0.5 ? "🔉" : "🔊"}
+              </button>
+              <input
+                type="range" min={0} max={1} step={0.05} value={volume}
+                onChange={(e) => saveVolume(Number(e.target.value))}
+                className="hidden w-20 accent-brand sm:block"
+                aria-label="Volumen de la música"
+              />
+              <button
+                onClick={() => saveSfx(!sfxOn)}
+                className={`rounded-lg px-2 py-1 text-xs ${sfxOn ? "bg-white/10 text-white" : "text-muted line-through"}`}
+                title="Sonidos al acertar o fallar"
+              >
+                Efectos
+              </button>
+            </div>
           </header>
 
           <div className="flex flex-col items-center gap-4">
@@ -151,7 +196,10 @@ export default function Game({
                     <p className="mt-2 text-muted">No respondiste a tiempo</p>
                   ) : null}
                   {myResult?.is_correct && (
-                    <span className="animate-float-up absolute -top-2 right-0 text-2xl font-black text-emerald-300 sm:-right-16">+{myResult.points}</span>
+                    <span className="animate-float-up absolute -top-2 right-0 text-right text-2xl font-black text-emerald-300 sm:-right-20">
+                      +{myResult.points}
+                      {myResult.bonus > 0 && <span className="block text-sm text-orange-300">+{myResult.bonus} 🔥 racha</span>}
+                    </span>
                   )}
                 </div>
               )
@@ -209,10 +257,19 @@ export default function Game({
         {me && (
           <div className="card p-5 text-center">
             <p className="text-sm text-muted">Tus puntos</p>
-            <p className="tabular text-4xl font-black">{me.score}</p>
+            <p key={me.score} className="animate-pop tabular text-4xl font-black">{me.score}</p>
+            {me.streak >= 2 && (
+              <p className="mt-1 text-sm font-bold text-orange-300">
+                🔥 Racha x{me.streak}{me.streak >= 2 && me.streak < 3 ? " · ¡una más y hay bonus!" : " · +150 por acierto"}
+              </p>
+            )}
           </div>
         )}
-        <PlayerList players={players} hostId={room.host_player_id} meId={session.player_id} showScore answeredRound={phase === "reveal" ? undefined : room.current_round} />
+        {players.length === 1 && me ? (
+          <SoloStats me={me} played={phase === "reveal" ? room.current_round : room.current_round - 1} />
+        ) : (
+          <PlayerList players={players} hostId={room.host_player_id} meId={session.player_id} showScore answeredRound={phase === "reveal" ? undefined : room.current_round} />
+        )}
       </aside>
     </div>
   );
