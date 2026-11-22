@@ -82,6 +82,18 @@ export default function Game({
     return () => clearTimeout(t);
   }, [phase, round.id, pause]);
 
+  // Si el navegador bloqueó el sonido, cualquier toque o tecla lo activa
+  useEffect(() => {
+    if (!needsTap || phase !== "playing") return;
+    const unlock = () => play(Math.max(0, (Date.now() + offset - startsAt) / 1000));
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, [needsTap, phase, play, offset, startsAt]);
+
   // Efecto de sonido al revelar (una vez por ronda)
   useEffect(() => {
     if (!roundResults || sfxPlayed.current === round.id) return;

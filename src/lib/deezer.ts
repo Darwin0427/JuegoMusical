@@ -13,8 +13,9 @@ export type DzTrack = {
   album?: { cover_medium?: string; cover_big?: string };
 };
 
-async function dz<T>(path: string, revalidate = 3600): Promise<T> {
-  const res = await fetch(`${API}${path}`, { next: { revalidate } });
+// revalidate = null -> sin caché (obligatorio para canciones: los enlaces de fragmentos vencen a los 15 min)
+async function dz<T>(path: string, revalidate: number | null = 3600): Promise<T> {
+  const res = await fetch(`${API}${path}`, revalidate === null ? { cache: "no-store" } : { next: { revalidate } });
   if (!res.ok) throw new Error(`Deezer respondió ${res.status}`);
   const json = await res.json();
   if (json?.error) throw new Error(json.error.message ?? "Error de Deezer");
@@ -38,14 +39,14 @@ export async function search(type: "artist" | "playlist", q: string) {
   return r.data.map((p) => ({ id: String(p.id), name: p.title, picture: p.picture_medium, extra: `${p.nb_tracks} canciones · ${p.user?.name ?? ""}` }));
 }
 
-// Trae las canciones de la fuente. El caché es corto porque los enlaces de los fragmentos vencen.
+// Trae las canciones de la fuente. Siempre frescas: los enlaces de los fragmentos vencen a los ~15 min.
 export async function getTracks(type: SourceType, id: string): Promise<DzTrack[]> {
   if (!/^\d+$/.test(id)) throw new Error("ID no válido");
   let path: string;
   if (type === "genre") path = `/chart/${id}/tracks?limit=100`;
   else if (type === "artist") path = `/artist/${id}/top?limit=100`;
   else path = `/playlist/${id}/tracks?limit=200`;
-  const r = await dz<{ data: DzTrack[] }>(path, 300);
+  const r = await dz<{ data: DzTrack[] }>(path, null);
   return r.data ?? [];
 }
 
