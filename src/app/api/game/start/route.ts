@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 export async function POST(req: Request) {
   let body: {
     token?: string; source_type?: SourceType; source_id?: string; source_label?: string; rounds?: number; seconds?: number;
-    target?: string; answer_mode?: string; random_start?: boolean;
+    target?: string; answer_mode?: string;
   };
   try {
     body = await req.json();
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
 
   try {
     const tracks = await getTracks(source_type as SourceType, source_id);
-    const rounds = buildRounds(tracks, { count, target, answerMode, randomStart: Boolean(body.random_start), seconds });
+    const rounds = buildRounds(tracks, { count, target, answerMode });
     const { error } = await supabase.rpc("start_game", {
       p_token: token,
       p_rounds: rounds,

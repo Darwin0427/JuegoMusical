@@ -102,7 +102,6 @@ function HostSetup({ session, playersCount }: { session: Session; playersCount: 
   const [seconds, setSeconds] = useState(20);
   const [target, setTarget] = useState<"song" | "artist">("song");
   const [answerMode, setAnswerMode] = useState<"choice" | "typed">("choice");
-  const [randomStart, setRandomStart] = useState<"start" | "random">("start");
   const [loadingCat, setLoadingCat] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
@@ -150,7 +149,7 @@ function HostSetup({ session, playersCount }: { session: Session; playersCount: 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           token: session.token, source_type: mode, source_id: selected.id, source_label: selected.name, rounds, seconds,
-          target: mode === "artist" ? "song" : target, answer_mode: answerMode, random_start: randomStart === "random",
+          target: mode === "artist" ? "song" : target, answer_mode: answerMode,
         }),
       });
       const json = await res.json();
@@ -206,7 +205,7 @@ function HostSetup({ session, playersCount }: { session: Session; playersCount: 
       {mode === "playlist" && <SearchPicker key="playlist" type="playlist" ideas={PLAYLIST_IDEAS} selected={selected} onSelect={setSelected} />}
       {mode === "artist" && <SearchPicker key="artist" type="artist" ideas={ARTIST_IDEAS} selected={selected} onSelect={setSelected} />}
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2">
         <Segmented
           label="Qué adivinar"
           value={mode === "artist" ? "song" : target}
@@ -218,12 +217,6 @@ function HostSetup({ session, playersCount }: { session: Session; playersCount: 
           value={answerMode}
           onChange={setAnswerMode}
           options={[{ id: "choice", label: "Opciones" }, { id: "typed", label: "Escribiendo" }]}
-        />
-        <Segmented
-          label="Fragmento"
-          value={randomStart}
-          onChange={setRandomStart}
-          options={[{ id: "start", label: "Desde el inicio" }, { id: "random", label: "Parte al azar" }]}
         />
       </div>
       {answerMode === "typed" && (

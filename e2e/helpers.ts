@@ -40,7 +40,7 @@ export async function joinWithLink(p: Player, code: string) {
 
 export async function setupGame(
   host: Page,
-  o: { categoria?: string; genero?: boolean; adivinar?: "Canción" | "Artista"; responder?: "Opciones" | "Escribiendo"; fragmento?: "Desde el inicio" | "Parte al azar"; rondas?: string; segundos?: string },
+  o: { categoria?: string; genero?: boolean; adivinar?: "Canción" | "Artista"; responder?: "Opciones" | "Escribiendo"; rondas?: string; segundos?: string },
 ) {
   if (o.categoria) {
     await host.getByRole("button", { name: o.categoria, exact: true }).click();
@@ -48,7 +48,6 @@ export async function setupGame(
   }
   if (o.adivinar) await host.getByRole("radio", { name: o.adivinar }).click();
   if (o.responder) await host.getByRole("radio", { name: o.responder }).click();
-  if (o.fragmento) await host.getByRole("radio", { name: o.fragmento }).click();
   if (o.rondas) await host.getByLabel("Rondas").selectOption(o.rondas);
   if (o.segundos) await host.getByLabel("Segundos por ronda").selectOption(o.segundos);
   await host.getByRole("button", { name: /^Empezar con/ }).click();

@@ -76,7 +76,7 @@ describe("Lobby · anfitrión", () => {
     await userEvent.click(screen.getByRole("button", { name: "Empezar con Rap" }));
     expect(startBody()).toEqual({
       token: "tok-1", source_type: "genre", source_id: "116", source_label: "Rap", rounds: 10, seconds: 20,
-      target: "song", answer_mode: "choice", random_start: false,
+      target: "song", answer_mode: "choice",
     });
   });
 
@@ -87,17 +87,18 @@ describe("Lobby · anfitrión", () => {
     expect(startBody()).toMatchObject({ source_type: "playlist", source_id: "77", source_label: "Reguetón" });
   });
 
-  it("opciones de partida: artista + escribiendo + fragmento al azar + 5 rondas de 15 s", async () => {
+  it("opciones de partida: artista + escribiendo + 5 rondas de 15 s (ya no existe la opción de fragmento)", async () => {
     renderHost();
     await userEvent.click(await screen.findByRole("button", { name: /Latino/ }));
     await userEvent.click(screen.getByRole("radio", { name: "Artista" }));
     await userEvent.click(screen.getByRole("radio", { name: "Escribiendo" }));
     expect(screen.getByText(/tienes 3 intentos/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("radio", { name: "Parte al azar" }));
+    expect(screen.queryByText("Fragmento")).toBeNull();
     await userEvent.selectOptions(screen.getByLabelText("Rondas"), "5");
     await userEvent.selectOptions(screen.getByLabelText("Segundos por ronda"), "15");
     await userEvent.click(screen.getByRole("button", { name: "Empezar con Latino" }));
-    expect(startBody()).toMatchObject({ source_id: "197", target: "artist", answer_mode: "typed", random_start: true, rounds: 5, seconds: 15 });
+    expect(startBody()).toMatchObject({ source_id: "197", target: "artist", answer_mode: "typed", rounds: 5, seconds: 15 });
+    expect(startBody()).not.toHaveProperty("random_start");
   });
 
   it("por artista: busca, y no permite adivinar el artista", async () => {

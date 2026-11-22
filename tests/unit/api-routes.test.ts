@@ -102,13 +102,12 @@ describe("POST /api/game/start", () => {
     expect(args.p_rounds[0].options).toHaveLength(4);
   });
 
-  it("modo escribir + artista + fragmento al azar", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0.5);
+  it("modo escribir + artista: sin opciones y siempre desde el inicio", async () => {
     await post({ ...base, rounds: 3, seconds: 10, target: "artist", answer_mode: "typed", random_start: true });
     const args = rpc.mock.calls[0][1];
     expect(args).toMatchObject({ p_answer_mode: "typed", p_target: "artist" });
     expect(args.p_rounds.every((r: { options: unknown[]; correct_index: number }) => r.options.length === 0 && r.correct_index === -1)).toBe(true);
-    expect(args.p_rounds.every((r: { start_offset: number }) => r.start_offset === 10)).toBe(true); // floor(0.5 * (29 - 10 + 1))
+    expect(args.p_rounds.every((r: { start_offset: number }) => r.start_offset === 0)).toBe(true); // random_start ya no existe: se ignora
   });
 
   it("limita rondas (3-20) y segundos (10-30), y valores raros vuelven al defecto", async () => {

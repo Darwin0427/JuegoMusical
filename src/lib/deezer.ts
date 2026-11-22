@@ -106,15 +106,13 @@ export type RoundConfig = {
   count: number;
   target: "song" | "artist";
   answerMode: "choice" | "typed";
-  randomStart: boolean;
-  seconds: number;
 };
 
 const artistKey = (t: DzTrack) => norm(t.artist.name);
 
 // Arma las rondas según el modo:
 // - qué adivinar: la canción (opciones de la misma fuente) o el artista (4 artistas distintos)
-// - fragmento: desde el inicio o desde un segundo al azar (dejando tiempo para toda la ronda)
+// - cómo responder: con 4 opciones o escribiendo (sin opciones)
 export function buildRounds(tracks: DzTrack[], cfg: RoundConfig): BuiltRound[] {
   const seen = new Set<string>();
   const pool = tracks.filter((t) => {
@@ -143,7 +141,6 @@ export function buildRounds(tracks: DzTrack[], cfg: RoundConfig): BuiltRound[] {
     picked = shuffle(pool).slice(0, Math.min(cfg.count, pool.length));
   }
 
-  const maxOffset = Math.max(0, 29 - cfg.seconds);
   return picked.map((t) => {
     let options: DzTrack[] = [];
     if (cfg.answerMode === "choice") {
@@ -166,7 +163,7 @@ export function buildRounds(tracks: DzTrack[], cfg: RoundConfig): BuiltRound[] {
     }
     return {
       preview_url: t.preview,
-      start_offset: cfg.randomStart && maxOffset > 0 ? Math.floor(Math.random() * (maxOffset + 1)) : 0,
+      start_offset: 0, // siempre desde el inicio del fragmento
       options: options.map((o) => ({
         title: cfg.target === "artist" ? o.artist.name : tidyTitle(o.title_short || o.title),
         artist: o.artist.name,

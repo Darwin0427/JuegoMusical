@@ -33,20 +33,20 @@ test("escribiendo con buscador: sugerencias reales de Deezer, intentos y lo que 
   await expect(host.page.getByText(`“${picked}”`)).toBeVisible();
 });
 
-test("fragmento al azar: el audio arranca en el segundo guardado para la ronda", async ({ browser }) => {
+test("el audio arranca desde el inicio del fragmento, sincronizado con la ronda", async ({ browser }) => {
   const host = await newPlayer(browser, "Darwin");
   players = [host];
   const code = await createRoom(host);
-  await setupGame(host.page, { categoria: "Vallenato", fragmento: "Parte al azar", rondas: "5", segundos: "10" });
+  await expect(host.page.getByText("Fragmento")).toHaveCount(0);
+  await setupGame(host.page, { categoria: "Vallenato", rondas: "5", segundos: "10" });
   await expect(host.page.locator("button.buzzer").first()).toBeEnabled({ timeout: 30_000 });
   const room = ((await rest(`rooms?code=eq.${code}&select=id`)).body as { id: string }[])[0];
   const r = ((await rest(`rounds?room_id=eq.${room.id}&round_number=eq.1&select=start_offset,starts_at`)).body as { start_offset: number; starts_at: string }[])[0];
-  expect(r.start_offset).toBeGreaterThanOrEqual(0);
-  expect(r.start_offset).toBeLessThanOrEqual(19);
+  expect(r.start_offset).toBe(0);
   await expect.poll(async () => (await audioState(host.page))?.paused, { timeout: 10_000 }).toBe(false);
   const a = (await audioState(host.page))!;
   const elapsed = (Date.now() - new Date(r.starts_at).getTime()) / 1000;
-  expect(Math.abs(a.time - (r.start_offset + elapsed))).toBeLessThan(3);
+  expect(Math.abs(a.time - elapsed)).toBeLessThan(3);
 });
 
 test("adivinar el artista con opciones: 4 artistas distintos", async ({ browser }) => {

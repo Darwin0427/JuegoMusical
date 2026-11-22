@@ -13,7 +13,7 @@ const track = (id: number, title: string, artist: string, extra: Partial<DzTrack
 
 // 12 canciones de 6 artistas
 const POOL: DzTrack[] = Array.from({ length: 12 }, (_, i) => track(i + 1, `Canción ${i + 1}`, `Artista ${(i % 6) + 1}`));
-const cfg = (c: Partial<RoundConfig> = {}): RoundConfig => ({ count: 10, target: "song", answerMode: "choice", randomStart: false, seconds: 20, ...c });
+const cfg = (c: Partial<RoundConfig> = {}): RoundConfig => ({ count: 10, target: "song", answerMode: "choice", ...c });
 
 describe("tidyTitle", () => {
   it.each([
@@ -68,10 +68,6 @@ describe("buildRounds · adivinar la canción con opciones", () => {
       expect(r.answer.cover).toMatch(/-b\.jpg$/);
       expect(r.answer.link).toMatch(/^https:\/\/deezer\.com\/track\//);
     }
-  });
-
-  it("sin fragmento al azar, empieza en el segundo 0", () => {
-    expect(rounds.every((r) => r.start_offset === 0)).toBe(true);
   });
 
   it("no pide más rondas de las canciones disponibles", () => {
@@ -144,29 +140,9 @@ describe("buildRounds · responder escribiendo", () => {
   });
 });
 
-describe("buildRounds · fragmento al azar", () => {
-  it("el inicio queda entre 0 y 29 - segundos de la ronda", () => {
-    const spy = vi.spyOn(Math, "random");
-    spy.mockReturnValue(0.9999);
-    const high = buildRounds(POOL, cfg({ randomStart: true, seconds: 10, count: 3 }));
-    expect(high.every((r) => r.start_offset === 19)).toBe(true);
-    spy.mockReturnValue(0);
-    const low = buildRounds(POOL, cfg({ randomStart: true, seconds: 10, count: 3 }));
-    expect(low.every((r) => r.start_offset === 0)).toBe(true);
-  });
-
-  it("con rondas de 30 segundos no hay margen y empieza en 0", () => {
-    const r = buildRounds(POOL, cfg({ randomStart: true, seconds: 30, count: 5 }));
-    expect(r.every((x) => x.start_offset === 0)).toBe(true);
-  });
-
-  it("muchas rondas al azar nunca se salen del rango", () => {
-    for (let i = 0; i < 50; i++) {
-      for (const r of buildRounds(POOL, cfg({ randomStart: true, seconds: 15, count: 12 }))) {
-        expect(r.start_offset).toBeGreaterThanOrEqual(0);
-        expect(r.start_offset).toBeLessThanOrEqual(14);
-      }
-    }
+describe("buildRounds · fragmento", () => {
+  it("siempre empieza desde el inicio del fragmento", () => {
+    for (let i = 0; i < 20; i++) expect(buildRounds(POOL, cfg({ count: 12 })).every((r) => r.start_offset === 0)).toBe(true);
   });
 });
 
