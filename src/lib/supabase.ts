@@ -38,7 +38,7 @@ export type Player = {
   total_ms: number;
 };
 
-export type Option = { title: string; artist: string };
+export type Option = { title: string; artist: string; cover?: string };
 
 export type Round = {
   id: string;

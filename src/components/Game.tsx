@@ -243,9 +243,19 @@ export default function Game({
                   disabled={phase !== "playing" || mine !== null}
                   className={`flex items-center gap-3 rounded-2xl border p-3 text-left transition sm:p-4 disabled:cursor-default ${state} ${phase === "countdown" ? "opacity-40" : ""}`}
                 >
-                  <span className={`tabular grid size-9 shrink-0 place-items-center rounded-xl text-lg font-black text-white ${isCorrect ? "bg-emerald-500" : isMineWrong ? "bg-rose-500" : s.badge}`}>
-                    {isCorrect ? "✓" : isMineWrong ? "✕" : i + 1}
-                  </span>
+                  {o.cover ? (
+                    <span className="relative size-14 shrink-0 sm:size-16">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={o.cover} alt="" className="size-full rounded-xl object-cover shadow-lg shadow-black/40" loading="eager" />
+                      <span className={`tabular absolute -top-1.5 -left-1.5 grid size-6 place-items-center rounded-lg text-xs font-black text-white ring-2 ring-ink ${isCorrect ? "bg-emerald-500" : isMineWrong ? "bg-rose-500" : s.badge}`}>
+                        {isCorrect ? "✓" : isMineWrong ? "✕" : i + 1}
+                      </span>
+                    </span>
+                  ) : (
+                    <span className={`tabular grid size-9 shrink-0 place-items-center rounded-xl text-lg font-black text-white ${isCorrect ? "bg-emerald-500" : isMineWrong ? "bg-rose-500" : s.badge}`}>
+                      {isCorrect ? "✓" : isMineWrong ? "✕" : i + 1}
+                    </span>
+                  )}
                   <span className="min-w-0">
                     <span className="block truncate font-semibold">{o.title}</span>
                     {room.source_type !== "artist" && <span className="block truncate text-sm text-muted">{o.artist}</span>}

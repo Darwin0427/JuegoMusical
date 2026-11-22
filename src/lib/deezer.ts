@@ -81,7 +81,7 @@ export function tidyTitle(raw: string): string {
 
 export type BuiltRound = {
   preview_url: string;
-  options: { title: string; artist: string }[];
+  options: { title: string; artist: string; cover: string }[];
   correct_index: number;
   answer: { title: string; artist: string; cover: string; link: string };
 };
@@ -104,7 +104,11 @@ export function buildRounds(tracks: DzTrack[], count: number): BuiltRound[] {
     const options = shuffle([t, ...fakes]);
     return {
       preview_url: t.preview,
-      options: options.map((o) => ({ title: tidyTitle(o.title_short || o.title), artist: o.artist.name })),
+      options: options.map((o) => ({
+        title: tidyTitle(o.title_short || o.title),
+        artist: o.artist.name,
+        cover: o.album?.cover_medium ?? o.album?.cover_big ?? "",
+      })),
       correct_index: options.findIndex((o) => o.id === t.id),
       answer: {
         title: tidyTitle(t.title_short || t.title),
