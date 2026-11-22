@@ -341,3 +341,15 @@ alter publication supabase_realtime add table public.rooms, public.players, publ
 -- Hora del servidor (para sincronizar relojes de los clientes)
 create or replace function public.server_now() returns timestamptz language sql stable set search_path = public as $$ select now() $$;
 grant execute on function public.server_now() to anon, authenticated;
+
+-- Resultados con tiempo de respuesta (ms desde el inicio de la ronda)
+drop function if exists public.round_results(uuid);
+create function public.round_results(p_round_id uuid)
+returns table(player_id uuid, choice int, is_correct boolean, points int, time_ms int)
+language sql stable security definer set search_path = public as $$
+  select a.player_id, a.choice, a.is_correct, a.points,
+         greatest(0, round(extract(epoch from (a.answered_at - r.starts_at)) * 1000))::int
+    from answers a join rounds r on r.id = a.round_id
+   where a.round_id = p_round_id and r.revealed_at is not null;
+$$;
+grant execute on function public.round_results(uuid) to anon, authenticated;

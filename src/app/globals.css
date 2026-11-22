@@ -35,3 +35,16 @@ h1, h2, h3 { text-wrap: balance; }
 @keyframes bars { 0%,100% { transform: scaleY(.3) } 50% { transform: scaleY(1) } }
 .eq span { display:inline-block; width:6px; margin:0 2px; height:36px; border-radius:3px; background:linear-gradient(var(--color-brand-2),var(--color-brand)); transform-origin:bottom; animation:bars .9s ease-in-out infinite; }
 .eq span:nth-child(2){animation-delay:.15s}.eq span:nth-child(3){animation-delay:.3s}.eq span:nth-child(4){animation-delay:.45s}.eq span:nth-child(5){animation-delay:.6s}
+
+.vinyl { background: repeating-radial-gradient(circle at center, #15101f 0 2px, #1d1630 2px 4px); box-shadow: inset 0 0 0 2px rgba(255,255,255,.04); }
+@keyframes spin-slow { to { transform: rotate(360deg) } }
+.animate-spin-slow { animation: spin-slow 3.2s linear infinite; }
+@keyframes urgent { 0%,100% { transform: scale(1) } 50% { transform: scale(1.04) } }
+.animate-urgent { animation: urgent .5s ease-in-out infinite; }
+.eq-live span { display:block; width:6px; height:100%; border-radius:3px; background:linear-gradient(var(--color-brand-2),var(--color-brand)); transform-origin:bottom; transform:scaleY(.12); transition: transform .08s linear; }
+.eq-live span[data-fallback="1"] { animation: bars .9s ease-in-out infinite; }
+@keyframes float-up { 0% { transform: translateY(8px); opacity: 0 } 20% { opacity: 1 } 100% { transform: translateY(-28px); opacity: 0 } }
+.animate-float-up { animation: float-up 1.6s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin-slow, .animate-urgent, .animate-pop, .animate-float-up, .eq-live span[data-fallback="1"] { animation: none !important; }
+}

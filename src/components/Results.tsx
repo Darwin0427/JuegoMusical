@@ -1,13 +1,28 @@
 "use client";
 
-import { useState } from "react";
-import { supabase, type Player, type Room } from "@/lib/supabase";
+import { useEffect, useState } from "react";
+import { supabase, type Player, type Room, type Round } from "@/lib/supabase";
 import type { Session } from "@/lib/session";
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
 export default function Results({ players, isHost, session, room }: { players: Player[]; isHost: boolean; session: Session; room: Room }) {
   const [busy, setBusy] = useState(false);
+  const [songs, setSongs] = useState<NonNullable<Round["answer"]>[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    supabase
+      .from("rounds")
+      .select("answer")
+      .eq("room_id", room.id)
+      .not("answer", "is", null)
+      .order("round_number")
+      .then(({ data }) => alive && setSongs(((data ?? []) as Pick<Round, "answer">[]).map((r) => r.answer!).filter(Boolean)));
+    return () => {
+      alive = false;
+    };
+  }, [room.id]);
   const ranking = [...players].sort((a, b) => b.score - a.score);
   const winner = ranking[0];
 
@@ -42,6 +57,29 @@ export default function Results({ players, isHost, session, room }: { players: P
         <button className="btn-primary w-full" onClick={again} disabled={busy}>{busy ? "…" : "Jugar otra vez"}</button>
       ) : (
         <p className="text-sm text-muted">Esperando a que el anfitrión inicie otra partida…</p>
+      )}
+
+      {songs.length > 0 && (
+        <div className="w-full text-left">
+          <h3 className="mb-2 text-sm font-semibold text-muted">Canciones de esta partida</h3>
+          <ul className="flex flex-col gap-1.5">
+            {songs.map((s, i) => (
+              <li key={i} className="flex items-center gap-3 rounded-xl bg-white/[.04] p-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {s.cover ? <img src={s.cover} alt="" className="size-10 rounded-lg object-cover" loading="lazy" /> : <span className="size-10" />}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium">{s.title}</span>
+                  <span className="block truncate text-xs text-muted">{s.artist}</span>
+                </span>
+                {s.link && (
+                  <a href={s.link} target="_blank" rel="noopener noreferrer" className="shrink-0 rounded-lg border border-line px-3 py-1.5 text-xs text-muted hover:bg-white/10 hover:text-white">
+                    Escuchar ↗
+                  </a>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </section>
   );

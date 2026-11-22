@@ -1,25 +1,37 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase, type Player, type Room, type Round, type RoundResult } from "@/lib/supabase";
 import type { Session } from "@/lib/session";
 import PlayerList from "./PlayerList";
+import TimerRing from "./TimerRing";
+import Equalizer from "./Equalizer";
+import { useGameAudio } from "./useGameAudio";
 
 const REVEAL_MS = 5000;
+
+// Cada opción con su color y número (también se responde con las teclas 1-4)
+const STYLES = [
+  { idle: "border-violet-400/30 bg-violet-500/10 hover:enabled:bg-violet-500/25", picked: "border-violet-300 bg-violet-500/35 ring-2 ring-violet-300/60", badge: "bg-violet-500" },
+  { idle: "border-pink-400/30 bg-pink-500/10 hover:enabled:bg-pink-500/25", picked: "border-pink-300 bg-pink-500/35 ring-2 ring-pink-300/60", badge: "bg-pink-500" },
+  { idle: "border-cyan-400/30 bg-cyan-500/10 hover:enabled:bg-cyan-500/25", picked: "border-cyan-300 bg-cyan-500/35 ring-2 ring-cyan-300/60", badge: "bg-cyan-500" },
+  { idle: "border-amber-400/30 bg-amber-500/10 hover:enabled:bg-amber-500/25", picked: "border-amber-300 bg-amber-500/35 ring-2 ring-amber-300/60", badge: "bg-amber-500" },
+];
+
+const secs = (ms: number) => (ms / 1000).toLocaleString("es-CO", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 export default function Game({
   room, players, round, me, session, offset,
 }: { room: Room; players: Player[]; round: Round; me: Player | null; session: Session; offset: number }) {
   const [now, setNow] = useState(() => Date.now() + offset);
-  const [choice, setChoice] = useState<{ round: string; index: number } | null>(null);
-  const [error, setError] = useState("");
-  const [results, setResults] = useState<RoundResult[] | null>(null);
-  const [needsTap, setNeedsTap] = useState(false);
-  const audioRef = useRef<HTMLAudioElement>(null);
+  const [choice, setChoice] = useState<{ round: string; index: number; ms: number } | null>(null);
+  const [error, setError] = useState<{ round: string; msg: string } | null>(null);
+  const [results, setResults] = useState<{ round: string; list: RoundResult[] } | null>(null);
   const lastAdvance = useRef(0);
+  const { play, pause, needsTap, analyserRef } = useGameAudio(round.preview_url);
 
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now() + offset), 200);
+    const t = setInterval(() => setNow(Date.now() + offset), 100);
     return () => clearInterval(t);
   }, [offset]);
 
@@ -29,148 +41,168 @@ export default function Game({
   const phase: "countdown" | "playing" | "closing" | "reveal" =
     revealedAt ? "reveal" : now < startsAt ? "countdown" : now < endsAt ? "playing" : "closing";
 
-  const myChoice = choice?.round === round.id ? choice.index : null;
+  const mine = choice?.round === round.id ? choice : null;
+  const roundResults = results?.round === round.id ? results.list : null;
+  const roundError = error?.round === round.id ? error.msg : "";
 
   // Cualquier jugador empuja el juego cuando toca (el servidor decide si corresponde)
   useEffect(() => {
     const due = phase === "closing" || (phase === "reveal" && revealedAt !== null && now >= revealedAt + REVEAL_MS);
     if (!due || Date.now() - lastAdvance.current < 1200) return;
     lastAdvance.current = Date.now();
-    // Ojo: las consultas de supabase-js no se envían hasta que se espera la promesa
     supabase.rpc("advance", { p_token: session.token }).then(({ error }) => {
       if (error) console.error("advance", error.message);
     });
   }, [phase, now, revealedAt, session.token]);
 
-  // Audio: cargar el fragmento de cada ronda y sonar al mismo tiempo para todos
+  // Audio sincronizado: todos empiezan en el mismo segundo
   useEffect(() => {
-    const a = audioRef.current;
-    if (!a) return;
-    a.pause();
-    a.src = round.preview_url;
-    a.load();
-    setResults(null);
-    setError("");
-  }, [round.id, round.preview_url]);
+    if (phase === "playing") play(Math.max(0, (now - startsAt) / 1000));
+    if (phase === "countdown") pause();
+  }, [phase, now, startsAt, play, pause]);
 
-  useEffect(() => {
-    const a = audioRef.current;
-    if (!a) return;
-    if (phase === "playing" && a.paused) {
-      const elapsed = Math.max(0, (now - startsAt) / 1000);
-      if (elapsed < 29) {
-        try { a.currentTime = elapsed; } catch {}
-      }
-      a.volume = 0.9;
-      a.play().then(() => setNeedsTap(false)).catch(() => setNeedsTap(true));
-    }
-    if (phase === "countdown" && !a.paused) a.pause();
-  }, [phase, now, startsAt]);
-
-  // Fade y pausa unos segundos después de revelar
   useEffect(() => {
     if (phase !== "reveal") return;
-    const a = audioRef.current;
-    const t = setTimeout(() => a?.pause(), REVEAL_MS - 500);
-    supabase.rpc("round_results", { p_round_id: round.id }).then(({ data }) => setResults((data as RoundResult[]) ?? []));
+    const t = setTimeout(pause, REVEAL_MS - 400);
+    supabase.rpc("round_results", { p_round_id: round.id }).then(({ data }) =>
+      setResults({ round: round.id, list: (data as RoundResult[]) ?? [] }),
+    );
     return () => clearTimeout(t);
-  }, [phase, round.id]);
+  }, [phase, round.id, pause]);
 
-  async function answer(i: number) {
-    if (myChoice !== null || phase !== "playing") return;
-    setChoice({ round: round.id, index: i });
-    const { error } = await supabase.rpc("submit_answer", { p_token: session.token, p_round_id: round.id, p_choice: i });
-    if (error) setError(error.message);
-  }
+  const answer = useCallback(
+    async (i: number) => {
+      if (mine || phase !== "playing") return;
+      setChoice({ round: round.id, index: i, ms: Math.max(0, now - startsAt) });
+      const { error } = await supabase.rpc("submit_answer", { p_token: session.token, p_round_id: round.id, p_choice: i });
+      if (error) setError({ round: round.id, msg: error.message });
+    },
+    [mine, phase, round.id, now, startsAt, session.token],
+  );
+
+  // Teclas 1-4
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+      const n = Number(e.key);
+      if (n >= 1 && n <= round.options.length) answer(n - 1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [answer, round.options.length]);
 
   const total = Math.max(1, endsAt - startsAt);
   const left = Math.max(0, endsAt - now);
-  const pct = phase === "playing" ? (left / total) * 100 : phase === "countdown" ? 100 : 0;
-  const countdown = Math.ceil((startsAt - now) / 1000);
-  const myResult = results?.find((r) => r.player_id === session.player_id);
+  const pct = phase === "playing" ? left / total : phase === "countdown" ? 1 : 0;
+  const urgent = phase === "playing" && left <= 5000;
+  const countdown = Math.max(1, Math.ceil((startsAt - now) / 1000));
+  const myResult = roundResults?.find((r) => r.player_id === session.player_id);
+  const revealed = phase === "reveal" && round.correct_index !== null;
+  const cover = phase === "reveal" ? round.answer?.cover : null;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-      <section className="card flex flex-col gap-6 p-5 sm:p-8">
-        <audio ref={audioRef} preload="auto" />
-        <header className="flex items-center justify-between text-sm text-muted">
-          <span>Ronda <b className="tabular text-white">{room.current_round}</b> de {room.total_rounds}</span>
-          <span className="truncate pl-3">{room.source_label}</span>
-        </header>
-
-        <div className="h-2 overflow-hidden rounded-full bg-white/10" aria-hidden>
-          <div className="h-full rounded-full bg-linear-to-r from-brand to-brand-2 transition-[width] duration-200 ease-linear" style={{ width: `${pct}%` }} />
-        </div>
-
-        <div className="flex min-h-40 flex-col items-center justify-center gap-3 text-center">
-          {phase === "countdown" && (
-            <>
-              <p className="text-muted">Prepárate…</p>
-              <p key={countdown} className="animate-pop tabular text-7xl font-black">{Math.max(1, countdown)}</p>
-            </>
-          )}
-          {(phase === "playing" || phase === "closing") && (
-            <>
-              <div className="eq" aria-hidden><span /><span /><span /><span /><span /></div>
-              <p className="tabular text-3xl font-black">{phase === "closing" ? "¡Tiempo!" : `${Math.ceil(left / 1000)} s`}</p>
-              <p className="text-muted">{phase === "closing" ? "Revelando la respuesta…" : myChoice !== null ?"Respuesta enviada. Esperando a los demás…" : room.source_type === "artist" ? "¿Qué canción es?" : "¿Qué canción suena?"}</p>
-            </>
-          )}
-          {phase === "reveal" && round.answer && (
-            <div className="animate-pop flex flex-col items-center gap-3 sm:flex-row sm:text-left">
-              {round.answer.cover && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={round.answer.cover} alt="" className="size-32 rounded-xl object-cover shadow-2xl shadow-brand/30" />
-              )}
-              <div>
-                <p className="text-sm text-muted">Era…</p>
-                <p className="text-2xl font-black">{round.answer.title}</p>
-                <p className="text-muted">{round.answer.artist}</p>
-                {myResult ? (
-                  <p className={`mt-2 font-semibold ${myResult.is_correct ? "text-emerald-300" : "text-red-300"}`}>
-                    {myResult.is_correct ? `¡Correcto! +${myResult.points}` : "Fallaste esta"}
-                  </p>
-                ) : results ? (
-                  <p className="mt-2 text-muted">No respondiste a tiempo</p>
-                ) : null}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {needsTap && phase === "playing" && (
-          <button className="btn-primary" onClick={() => audioRef.current?.play().then(() => setNeedsTap(false))}>
-            🔊 Toca para activar el sonido
-          </button>
+    <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+      <section className="card relative overflow-hidden p-5 sm:p-8">
+        {/* Portada difuminada de fondo al revelar */}
+        {cover && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={cover} alt="" aria-hidden className="pointer-events-none absolute inset-0 size-full scale-125 object-cover opacity-25 blur-3xl" />
         )}
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          {round.options.map((o, i) => {
-            const revealed = phase === "reveal" && round.correct_index !== null;
-            const isCorrect = revealed && i === round.correct_index;
-            const isMineWrong = revealed && i === myChoice && !isCorrect;
-            const whoPicked = revealed ? (results ?? []).filter((r) => r.choice === i).map((r) => players.find((p) => p.id === r.player_id)?.nickname).filter(Boolean) : [];
-            return (
-              <button
-                key={i}
-                onClick={() => answer(i)}
-                disabled={phase !== "playing" || myChoice !== null}
-                className={`rounded-2xl border p-4 text-left transition disabled:cursor-default ${
-                  isCorrect ? "border-emerald-400 bg-emerald-500/20"
-                  : isMineWrong ? "border-red-400 bg-red-500/15"
-                  : myChoice === i ? "border-brand bg-brand/20"
-                  : "border-line bg-white/[.03] hover:enabled:border-brand hover:enabled:bg-brand/10"
-                } ${phase === "countdown" ? "opacity-40" : ""}`}
-              >
-                <span className="block font-semibold">{o.title}</span>
-                {room.source_type !== "artist" && <span className="block text-sm text-muted">{o.artist}</span>}
-                {whoPicked.length > 0 && <span className="mt-1 block text-xs text-muted">{whoPicked.join(", ")}</span>}
-              </button>
-            );
-          })}
-        </div>
+        <div className="relative flex flex-col gap-6">
+          <header className="flex items-center justify-between text-sm text-muted">
+            <span>Ronda <b className="tabular text-white">{room.current_round}</b> de {room.total_rounds}</span>
+            <span className="truncate pl-3">{room.source_label}</span>
+          </header>
 
-        {error && <p className="text-center text-sm text-red-300" role="alert">{error}</p>}
+          <div className="flex flex-col items-center gap-4">
+            <TimerRing pct={pct} urgent={urgent} spinning={phase === "playing"} cover={cover}>
+              {phase === "countdown" && (
+                <span key={countdown} className="animate-pop tabular rounded-full bg-ink/80 px-5 py-2 text-5xl font-black">{countdown}</span>
+              )}
+              {phase === "playing" && (
+                <span className={`tabular rounded-full bg-ink/80 px-4 py-1.5 text-3xl font-black ${urgent ? "text-rose-400" : ""}`}>
+                  {Math.ceil(left / 1000)}
+                </span>
+              )}
+              {phase === "closing" && <span className="rounded-full bg-ink/80 px-4 py-1.5 text-xl font-black">¡Tiempo!</span>}
+            </TimerRing>
+
+            {phase !== "reveal" ? (
+              <div className="flex min-h-20 flex-col items-center gap-2 text-center">
+                <Equalizer analyserRef={analyserRef} active={phase === "playing"} />
+                <p className="text-muted">
+                  {phase === "countdown" ? "Prepárate…"
+                    : phase === "closing" ? "Revelando la respuesta…"
+                    : mine ? `Respondiste en ${secs(mine.ms)} s. Esperando a los demás…`
+                    : room.source_type === "artist" ? "¿Qué canción es?" : "¿Qué canción suena?"}
+                </p>
+              </div>
+            ) : (
+              round.answer && (
+                <div className="animate-pop relative flex min-h-20 flex-col items-center text-center">
+                  <p className="text-2xl font-black sm:text-3xl">{round.answer.title}</p>
+                  <p className="text-muted">{round.answer.artist}</p>
+                  {myResult ? (
+                    <p className={`mt-2 font-semibold ${myResult.is_correct ? "text-emerald-300" : "text-rose-300"}`}>
+                      {myResult.is_correct ? `¡Correcto! en ${secs(myResult.time_ms)} s` : `Fallaste · respondiste en ${secs(myResult.time_ms)} s`}
+                    </p>
+                  ) : roundResults ? (
+                    <p className="mt-2 text-muted">No respondiste a tiempo</p>
+                  ) : null}
+                  {myResult?.is_correct && (
+                    <span className="animate-float-up absolute -top-2 right-0 text-2xl font-black text-emerald-300 sm:-right-16">+{myResult.points}</span>
+                  )}
+                </div>
+              )
+            )}
+          </div>
+
+          {needsTap && phase === "playing" && (
+            <button className="btn-primary" onClick={() => play(Math.max(0, (now - startsAt) / 1000))}>
+              🔊 Toca para activar el sonido
+            </button>
+          )}
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {round.options.map((o, i) => {
+              const s = STYLES[i % STYLES.length];
+              const isCorrect = revealed && i === round.correct_index;
+              const isMineWrong = revealed && i === mine?.index && !isCorrect;
+              const picks = revealed ? (roundResults ?? []).filter((r) => r.choice === i) : [];
+              const state = isCorrect ? "border-emerald-400 bg-emerald-500/25 ring-2 ring-emerald-400/60"
+                : isMineWrong ? "border-rose-400 bg-rose-500/20"
+                : revealed ? "border-line bg-white/[.02] opacity-45"
+                : mine?.index === i ? s.picked
+                : mine ? `${s.idle} opacity-50`
+                : s.idle;
+              return (
+                <button
+                  key={i}
+                  onClick={() => answer(i)}
+                  disabled={phase !== "playing" || mine !== null}
+                  className={`flex items-center gap-3 rounded-2xl border p-3 text-left transition sm:p-4 disabled:cursor-default ${state} ${phase === "countdown" ? "opacity-40" : ""}`}
+                >
+                  <span className={`tabular grid size-9 shrink-0 place-items-center rounded-xl text-lg font-black text-white ${isCorrect ? "bg-emerald-500" : isMineWrong ? "bg-rose-500" : s.badge}`}>
+                    {isCorrect ? "✓" : isMineWrong ? "✕" : i + 1}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate font-semibold">{o.title}</span>
+                    {room.source_type !== "artist" && <span className="block truncate text-sm text-muted">{o.artist}</span>}
+                    {picks.length > 0 && (
+                      <span className="mt-0.5 block truncate text-xs text-white/70">
+                        {picks.map((r) => `${players.find((p) => p.id === r.player_id)?.nickname ?? "?"} ${secs(r.time_ms)}s`).join(" · ")}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <p className="hidden text-center text-xs text-muted sm:block">Tip: responde con las teclas 1 a 4</p>
+          {roundError && <p className="text-center text-sm text-rose-300" role="alert">{roundError}</p>}
+        </div>
       </section>
 
       <aside className="flex flex-col gap-4">

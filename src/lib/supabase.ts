@@ -48,4 +48,4 @@ export type Round = {
   answer: { title: string; artist: string; cover: string; link: string } | null;
 };
 
-export type RoundResult = { player_id: string; choice: number; is_correct: boolean; points: number };
+export type RoundResult = { player_id: string; choice: number; is_correct: boolean; points: number; time_ms: number };
