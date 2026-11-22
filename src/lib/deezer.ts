@@ -81,35 +81,83 @@ export function tidyTitle(raw: string): string {
 
 export type BuiltRound = {
   preview_url: string;
+  start_offset: number;
   options: { title: string; artist: string; cover: string }[];
   correct_index: number;
   answer: { title: string; artist: string; cover: string; link: string };
 };
 
-// Arma las rondas: una canción correcta + 3 opciones falsas de la misma fuente.
-export function buildRounds(tracks: DzTrack[], count: number): BuiltRound[] {
+export type RoundConfig = {
+  count: number;
+  target: "song" | "artist";
+  answerMode: "choice" | "typed";
+  randomStart: boolean;
+  seconds: number;
+};
+
+const artistKey = (t: DzTrack) => norm(t.artist.name);
+
+// Arma las rondas según el modo:
+// - qué adivinar: la canción (opciones de la misma fuente) o el artista (4 artistas distintos)
+// - fragmento: desde el inicio o desde un segundo al azar (dejando tiempo para toda la ronda)
+export function buildRounds(tracks: DzTrack[], cfg: RoundConfig): BuiltRound[] {
   const seen = new Set<string>();
   const pool = tracks.filter((t) => {
     if (!t.preview) return false;
-    const k = norm(t.title_short || t.title);
-    if (!k || seen.has(k)) return false;
+    const k = norm(t.title_short || t.title) + "|" + artistKey(t);
+    if (!norm(t.title_short || t.title) || seen.has(k)) return false;
     seen.add(k);
     return true;
   });
-  if (pool.length < 4) throw new Error("Esta fuente no tiene suficientes canciones con fragmento (mínimo 4).");
+  if (pool.length < 4) throw new Error("Esta música tiene muy pocas canciones con fragmento disponible. Elige otra.");
 
-  const picked = shuffle(pool).slice(0, Math.min(count, pool.length));
+  const artists = new Set(pool.map(artistKey));
+  if (cfg.target === "artist" && cfg.answerMode === "choice" && artists.size < 4) {
+    throw new Error("Para adivinar el artista hacen falta al menos 4 artistas distintos. Elige otra música o adivina la canción.");
+  }
+
+  // Adivinando el artista, evitar repetir el mismo artista en rondas seguidas
+  let picked: DzTrack[];
+  if (cfg.target === "artist") {
+    const byArtist = new Map<string, DzTrack[]>();
+    shuffle(pool).forEach((t) => byArtist.set(artistKey(t), [...(byArtist.get(artistKey(t)) ?? []), t]));
+    const firsts = shuffle([...byArtist.values()].map((l) => l[0]));
+    const rest = shuffle([...byArtist.values()].flatMap((l) => l.slice(1)));
+    picked = [...firsts, ...rest].slice(0, Math.min(cfg.count, pool.length));
+  } else {
+    picked = shuffle(pool).slice(0, Math.min(cfg.count, pool.length));
+  }
+
+  const maxOffset = Math.max(0, 29 - cfg.seconds);
   return picked.map((t) => {
-    const fakes = shuffle(pool.filter((x) => x.id !== t.id)).slice(0, 3);
-    const options = shuffle([t, ...fakes]);
+    let options: DzTrack[] = [];
+    if (cfg.answerMode === "choice") {
+      const fakes =
+        cfg.target === "artist"
+          ? (() => {
+              const used = new Set([artistKey(t)]);
+              const out: DzTrack[] = [];
+              for (const x of shuffle(pool)) {
+                if (out.length === 3) break;
+                if (!used.has(artistKey(x))) {
+                  used.add(artistKey(x));
+                  out.push(x);
+                }
+              }
+              return out;
+            })()
+          : shuffle(pool.filter((x) => x.id !== t.id)).slice(0, 3);
+      options = shuffle([t, ...fakes]);
+    }
     return {
       preview_url: t.preview,
+      start_offset: cfg.randomStart && maxOffset > 0 ? Math.floor(Math.random() * (maxOffset + 1)) : 0,
       options: options.map((o) => ({
-        title: tidyTitle(o.title_short || o.title),
+        title: cfg.target === "artist" ? o.artist.name : tidyTitle(o.title_short || o.title),
         artist: o.artist.name,
         cover: o.album?.cover_medium ?? o.album?.cover_big ?? "",
       })),
-      correct_index: options.findIndex((o) => o.id === t.id),
+      correct_index: cfg.answerMode === "choice" ? options.findIndex((o) => o.id === t.id) : -1,
       answer: {
         title: tidyTitle(t.title_short || t.title),
         artist: t.artist.name,

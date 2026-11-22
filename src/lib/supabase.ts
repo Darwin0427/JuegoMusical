@@ -22,6 +22,8 @@ export type Room = {
   total_rounds: number;
   current_round: number;
   round_seconds: number;
+  answer_mode: "choice" | "typed";
+  target: "song" | "artist";
 };
 
 export type Player = {
@@ -46,6 +48,7 @@ export type Round = {
   round_number: number;
   preview_url: string;
   options: Option[];
+  start_offset: number;
   starts_at: string | null;
   ends_at: string | null;
   revealed_at: string | null;
@@ -53,4 +56,4 @@ export type Round = {
   answer: { title: string; artist: string; cover: string; link: string } | null;
 };
 
-export type RoundResult = { player_id: string; choice: number; is_correct: boolean; points: number; bonus: number; time_ms: number };
+export type RoundResult = { player_id: string; choice: number; is_correct: boolean; points: number; bonus: number; time_ms: number; text_answer: string | null; attempts: number };

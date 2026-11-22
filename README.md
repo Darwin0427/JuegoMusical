@@ -2,10 +2,13 @@
 
 Juego multijugador tipo *blind test*: suena un fragmento de 30 s y gana quien adivine la canción más rápido.
 
-## Modos
-- **Por género**: las canciones más escuchadas de un género de Deezer.
-- **Por playlist**: cualquier playlist pública de Deezer (búsqueda o enlace pegado).
-- **Por artista**: solo canciones de un artista.
+## Cómo se juega
+- **Música**: categorías listas (Reguetón, Top Colombia, Rock en español…), o por género, playlist o artista de Deezer.
+- **Qué adivinar**: la canción o el artista.
+- **Cómo responder**: elegir entre 4 opciones, o escribir la respuesta (3 intentos; se perdonan tildes y errores pequeños, validado en el servidor con `unaccent` + distancia de Levenshtein).
+- **Fragmento**: desde el inicio o desde un segundo al azar.
+- **Puntos**: 500 por acertar + hasta 500 por rapidez, y +150 por acierto desde una racha de 3.
+- **Invitar**: código de 5 letras, enlace o código QR.
 
 ## Stack
 - **Next.js** (App Router) — interfaz y rutas `/api/*` que consultan Deezer desde el servidor.

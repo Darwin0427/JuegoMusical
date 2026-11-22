@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Logo from "@/components/ui/Logo";
+import { CATEGORIES } from "@/lib/categories";
 import { saveNickname, saveSession, useStoredNickname, type Session } from "@/lib/session";
 
 type PublicRoom = { code: string; host: string | null; players: number; created_at: string };
@@ -47,7 +48,7 @@ export default function Home() {
     return n;
   }
 
-  async function create() {
+  async function create(cat?: string) {
     const n = checkNick();
     if (!n) return;
     setBusy("create");
@@ -57,7 +58,7 @@ export default function Home() {
     if (error) return setError(error.message);
     const s = data as Session;
     saveSession(s);
-    router.push(`/sala/${s.code}`);
+    router.push(`/sala/${s.code}${cat ? `?cat=${cat}` : ""}`);
   }
 
   async function join(c = code) {
@@ -95,13 +96,27 @@ export default function Home() {
           onChange={(e) => setNick(e.target.value)}
         />
 
-        <button className="btn-primary mt-5 w-full py-4 text-xl" onClick={create} disabled={busy !== null}>
+        <button className="btn-primary mt-5 w-full py-4 text-xl" onClick={() => create()} disabled={busy !== null}>
           {busy === "create" ? "Creando sala…" : "Crear sala"}
         </button>
         <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm font-bold text-muted">
           <input type="checkbox" checked={isPublic} onChange={(e) => setIsPublic(e.target.checked)} className="size-4 accent-stage" />
           Que aparezca en salas públicas
         </label>
+
+        <p className="mt-5 mb-2 font-extrabold">O arranca directo con una categoría</p>
+        <div className="flex flex-wrap gap-2">
+          {CATEGORIES.map((c) => (
+            <button
+              key={c.slug}
+              onClick={() => create(c.slug)}
+              disabled={busy !== null}
+              className={`rounded-xl border-[3px] border-ink px-3 py-1.5 text-sm font-extrabold shadow-[0_3px_0_var(--color-ink)] transition-[transform,box-shadow] duration-75 active:translate-y-[2px] active:shadow-[0_1px_0_var(--color-ink)] disabled:opacity-60 ${c.color}`}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
 
         <div className="my-6 border-t-[3px] border-dashed border-fog" />
 

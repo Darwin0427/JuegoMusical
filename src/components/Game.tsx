@@ -27,6 +27,10 @@ export default function Game({
   const [choice, setChoice] = useState<{ round: string; index: number; ms: number } | null>(null);
   const [error, setError] = useState<{ round: string; msg: string } | null>(null);
   const [results, setResults] = useState<{ round: string; list: RoundResult[] } | null>(null);
+  // Modo escribir: texto actual e intentos de esta ronda
+  const [guess, setGuess] = useState<{ round: string; text: string }>({ round: "", text: "" });
+  const [typed, setTyped] = useState<{ round: string; left: number; correct: boolean; ms: number; lastWrong: string } | null>(null);
+  const [sending, setSending] = useState(false);
   const lastAdvance = useRef(0);
   const { play, pause, setVolume, needsTap, analyserRef } = useGameAudio(round.preview_url);
   const [volume, saveVolume] = useVolume();
@@ -51,6 +55,13 @@ export default function Game({
     revealedAt ? "reveal" : now < startsAt ? "countdown" : now < endsAt ? "playing" : "closing";
 
   const mine = choice?.round === round.id ? choice : null;
+  const isTyped = room.answer_mode === "typed";
+  const isArtist = room.target === "artist";
+  const myTyped = typed?.round === round.id ? typed : null;
+  const typedDone = !!myTyped && (myTyped.correct || myTyped.left === 0);
+  const guessText = guess.round === round.id ? guess.text : "";
+  // Segundo del fragmento que debe sonar ahora (con fragmento al azar empieza más adelante)
+  const audioAt = useCallback((t: number) => (round.start_offset ?? 0) + Math.max(0, (t - startsAt) / 1000), [round.start_offset, startsAt]);
   const roundResults = results?.round === round.id ? results.list : null;
   const roundError = error?.round === round.id ? error.msg : "";
 
@@ -66,9 +77,9 @@ export default function Game({
 
   // Audio sincronizado: todos empiezan en el mismo segundo
   useEffect(() => {
-    if (phase === "playing") play(Math.max(0, (now - startsAt) / 1000));
+    if (phase === "playing") play(audioAt(now));
     if (phase === "countdown") pause();
-  }, [phase, now, startsAt, play, pause]);
+  }, [phase, now, audioAt, play, pause]);
 
   useEffect(() => {
     if (phase !== "reveal") return;
@@ -82,14 +93,14 @@ export default function Game({
   // Si el navegador bloqueó el sonido, cualquier toque o tecla lo activa
   useEffect(() => {
     if (!needsTap || phase !== "playing") return;
-    const unlock = () => play(Math.max(0, (Date.now() + offset - startsAt) / 1000));
+    const unlock = () => play(audioAt(Date.now() + offset));
     window.addEventListener("pointerdown", unlock);
     window.addEventListener("keydown", unlock);
     return () => {
       window.removeEventListener("pointerdown", unlock);
       window.removeEventListener("keydown", unlock);
     };
-  }, [needsTap, phase, play, offset, startsAt]);
+  }, [needsTap, phase, play, offset, audioAt]);
 
   // Efecto de sonido al revelar (una vez por ronda)
   useEffect(() => {
@@ -111,16 +122,33 @@ export default function Game({
     [mine, phase, round.id, now, startsAt, session.token],
   );
 
-  // Teclas 1-4
+  async function submitGuess(e: React.FormEvent) {
+    e.preventDefault();
+    const text = guessText.trim();
+    if (!text || sending || typedDone || phase !== "playing") return;
+    setSending(true);
+    const ms = Math.max(0, now - startsAt);
+    const { data, error } = await supabase.rpc("submit_answer", { p_token: session.token, p_round_id: round.id, p_text: text });
+    setSending(false);
+    if (error) return setError({ round: round.id, msg: error.message });
+    const r = data as { correct: boolean; attempts_left: number };
+    setTyped({ round: round.id, left: r.attempts_left, correct: r.correct, ms, lastWrong: r.correct ? "" : text });
+    if (!r.correct) setGuess({ round: round.id, text: "" });
+    if (sfxOn && !r.correct && r.attempts_left > 0) playSfx("wrong", volume * 0.6);
+  }
+
+  // Teclas 1-4 (solo con opciones, y nunca mientras se escribe en un campo)
   useEffect(() => {
+    if (isTyped) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       const n = Number(e.key);
       if (n >= 1 && n <= round.options.length) answer(n - 1);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [answer, round.options.length]);
+  }, [answer, round.options.length, isTyped]);
 
   const total = Math.max(1, endsAt - startsAt);
   const left = Math.max(0, endsAt - now);
@@ -185,7 +213,9 @@ export default function Game({
                 {phase === "countdown" ? "Prepárate"
                   : phase === "closing" ? "Veamos la respuesta"
                   : mine ? `Respondiste en ${secs(mine.ms)} s`
-                  : "¿Qué canción es?"}
+                  : myTyped?.correct ? `¡La sacaste en ${secs(myTyped.ms)} s!`
+                  : typedDone ? "Se acabaron tus intentos"
+                  : isArtist ? "¿Quién canta?" : "¿Qué canción es?"}
               </p>
             </div>
           ) : (
@@ -213,11 +243,63 @@ export default function Game({
         </div>
 
         {needsTap && phase === "playing" && (
-          <button className="btn-ghost" onClick={() => play(Math.max(0, (now - startsAt) / 1000))}>
+          <button className="btn-ghost" onClick={() => play(audioAt(now))}>
             <Speaker /> Toca aquí para activar el sonido
           </button>
         )}
 
+        {isTyped ? (
+          phase === "reveal" ? (
+            <div className="panel p-4">
+              <h3 className="display mb-2 text-xl">Lo que escribió cada uno</h3>
+              <ul className="flex flex-col gap-2">
+                {players.map((p) => {
+                  const r = (roundResults ?? []).find((x) => x.player_id === p.id);
+                  return (
+                    <li key={p.id} className={`flex items-center gap-3 rounded-xl border-2 px-3 py-2 ${r?.is_correct ? "border-ink bg-ok text-paper" : "border-fog"}`}>
+                      <span className="w-24 shrink-0 truncate font-black">{p.nickname}</span>
+                      <span className="min-w-0 flex-1 truncate font-bold">
+                        {r?.text_answer ? `“${r.text_answer}”` : <span className="opacity-60">sin respuesta</span>}
+                      </span>
+                      {r && <span className="tabular text-sm font-black">{r.is_correct ? `${secs(r.time_ms)} s` : `${r.attempts} intento${r.attempts === 1 ? "" : "s"}`}</span>}
+                      {r && (r.is_correct ? <Check /> : <Cross className="size-4 text-bad" />)}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : (
+            <form onSubmit={submitGuess} className="panel flex flex-col gap-3 p-4">
+              <label htmlFor="guess" className="display text-xl">{isArtist ? "Escribe el artista" : "Escribe el nombre de la canción"}</label>
+              <div className="flex gap-2">
+                <input
+                  id="guess"
+                  className={`input text-lg ${myTyped?.lastWrong && !typedDone ? "border-bad" : ""}`}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  maxLength={80}
+                  placeholder={typedDone ? "" : isArtist ? "Ej: Karol G" : "Ej: Tusa"}
+                  value={guessText}
+                  disabled={phase !== "playing" || typedDone}
+                  onChange={(e) => setGuess({ round: round.id, text: e.target.value })}
+                />
+                <button className="btn-primary shrink-0" disabled={phase !== "playing" || typedDone || sending || !guessText.trim()}>
+                  {sending ? "…" : "Responder"}
+                </button>
+              </div>
+              <p className={`text-sm font-extrabold ${myTyped?.correct ? "text-ok" : myTyped?.lastWrong ? "text-bad" : "text-muted"}`} aria-live="polite">
+                {myTyped?.correct
+                  ? "¡Correcto! Espera a que se revele para ver tus puntos."
+                  : myTyped?.lastWrong
+                    ? myTyped.left > 0
+                      ? `“${myTyped.lastWrong}” no es. Te quedan ${myTyped.left} intento${myTyped.left === 1 ? "" : "s"}.`
+                      : `“${myTyped.lastWrong}” tampoco era. Ya no te quedan intentos.`
+                    : "Tienes 3 intentos. No importan las tildes ni errores pequeños."}
+              </p>
+            </form>
+          )
+        ) : (
         <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
           {round.options.map((o, i) => {
             const isCorrect = revealed && i === round.correct_index;
@@ -247,7 +329,7 @@ export default function Game({
                 </span>
                 <span className="min-w-0">
                   <span className="display block truncate text-xl leading-tight">{o.title}</span>
-                  {room.source_type !== "artist" && <span className="block truncate font-extrabold opacity-75">{o.artist}</span>}
+                  {room.source_type !== "artist" && !isArtist && <span className="block truncate font-extrabold opacity-75">{o.artist}</span>}
                   {picks.length > 0 && (
                     <span className="mt-0.5 block truncate text-sm font-black">
                       {picks.map((r) => `${players.find((p) => p.id === r.player_id)?.nickname ?? "?"} ${secs(r.time_ms)}s`).join(", ")}
@@ -258,8 +340,9 @@ export default function Game({
             );
           })}
         </div>
+        )}
 
-        <p className="hidden text-center text-sm font-bold text-paper/70 sm:block">En el teclado puedes responder con 1, 2, 3 o 4</p>
+        {!isTyped && <p className="hidden text-center text-sm font-bold text-paper/70 sm:block">En el teclado puedes responder con 1, 2, 3 o 4</p>}
         {roundError && <p className="text-center font-bold text-sun" role="alert">{roundError}</p>}
       </section>
 

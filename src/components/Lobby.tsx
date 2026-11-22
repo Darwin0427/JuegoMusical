@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import QRCode from "qrcode";
 import type { Player, Room } from "@/lib/supabase";
 import type { Session } from "@/lib/session";
+import { CATEGORIES, findCategory, resolveCategory, type Category } from "@/lib/categories";
 import PlayerList from "./PlayerList";
 
 type Mode = "genre" | "playlist" | "artist";
@@ -20,6 +22,17 @@ const ARTIST_IDEAS = ["Bad Bunny", "Karol G", "Shakira", "Feid", "Soda Stereo", 
 export default function Lobby({ room, players, session, isHost }: { room: Room; players: Player[]; session: Session; isHost: boolean }) {
   const host = players.find((p) => p.id === room.host_player_id);
   const [copied, setCopied] = useState(false);
+  const [qr, setQr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    QRCode.toDataURL(`${location.origin}/sala/${room.code}`, { margin: 1, width: 360, color: { dark: "#10122b", light: "#ffffff" } })
+      .then((url) => alive && setQr(url))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [room.code]);
 
   function copyLink() {
     navigator.clipboard?.writeText(`${location.origin}/sala/${room.code}`).then(() => {
@@ -42,13 +55,42 @@ export default function Lobby({ room, players, session, isHost }: { room: Room; 
       </section>
 
       <aside className="flex flex-col gap-4">
-        <div className="panel bg-sun! p-5 text-center">
+        <div className="panel bg-sun! flex flex-col items-center gap-3 p-5 text-center">
           <p className="font-extrabold">Código para entrar</p>
-          <p className="display my-1 text-5xl tracking-[.18em]">{room.code}</p>
+          <p className="display -my-1 text-5xl tracking-[.18em]">{room.code}</p>
+          {qr && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={qr} alt={`Código QR para entrar a la sala ${room.code}`} className="size-40 rounded-xl border-[3px] border-ink bg-paper p-1" />
+          )}
+          <p className="text-sm font-bold">Escanéalo con la cámara del celular para entrar</p>
           <button className="btn-ghost w-full py-2" onClick={copyLink}>{copied ? "Enlace copiado" : "Copiar enlace de invitación"}</button>
         </div>
         <PlayerList players={players} hostId={room.host_player_id} meId={session.player_id} />
       </aside>
+    </div>
+  );
+}
+
+function Segmented<T extends string>({ label, value, options, onChange }: {
+  label: string; value: T; options: { id: T; label: string; disabled?: boolean }[]; onChange: (v: T) => void;
+}) {
+  return (
+    <div>
+      <p className="mb-1.5 font-extrabold">{label}</p>
+      <div className="grid grid-cols-2 gap-1 rounded-xl border-[3px] border-ink bg-fog p-1" role="radiogroup" aria-label={label}>
+        {options.map((o) => (
+          <button
+            key={o.id}
+            role="radio"
+            aria-checked={value === o.id}
+            disabled={o.disabled}
+            onClick={() => onChange(o.id)}
+            className={`rounded-lg px-2 py-2 text-sm font-extrabold transition-colors disabled:opacity-40 ${value === o.id ? "bg-ink text-paper" : "hover:bg-paper"}`}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -58,8 +100,45 @@ function HostSetup({ session, playersCount }: { session: Session; playersCount: 
   const [selected, setSelected] = useState<Item | null>(null);
   const [rounds, setRounds] = useState(10);
   const [seconds, setSeconds] = useState(20);
+  const [target, setTarget] = useState<"song" | "artist">("song");
+  const [answerMode, setAnswerMode] = useState<"choice" | "typed">("choice");
+  const [randomStart, setRandomStart] = useState<"start" | "random">("start");
+  const [loadingCat, setLoadingCat] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
+
+  const pickCategory = async (c: Category) => {
+    setLoadingCat(c.slug);
+    setError("");
+    try {
+      const item = await resolveCategory(c);
+      if (!item) throw new Error(`No encontramos música para ${c.label}. Prueba otra categoría.`);
+      setMode("playlist");
+      setSelected(item);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoadingCat(null);
+    }
+  };
+
+  // Si se llegó desde una categoría del inicio (?cat=reggaeton), dejarla elegida
+  useEffect(() => {
+    const c = findCategory(new URLSearchParams(location.search).get("cat"));
+    if (!c) return;
+    history.replaceState(null, "", location.pathname);
+    let alive = true;
+    resolveCategory(c)
+      .then((item) => {
+        if (!alive || !item) return;
+        setMode("playlist");
+        setSelected(item);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   async function start() {
     if (!selected) return;
@@ -69,7 +148,10 @@ function HostSetup({ session, playersCount }: { session: Session; playersCount: 
       const res = await fetch("/api/game/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: session.token, source_type: mode, source_id: selected.id, source_label: selected.name, rounds, seconds }),
+        body: JSON.stringify({
+          token: session.token, source_type: mode, source_id: selected.id, source_label: selected.name, rounds, seconds,
+          target: mode === "artist" ? "song" : target, answer_mode: answerMode, random_start: randomStart === "random",
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "No se pudo iniciar");
@@ -86,24 +168,67 @@ function HostSetup({ session, playersCount }: { session: Session; playersCount: 
         <p className="font-bold text-muted">{playersCount === 1 ? "Puedes jugar solo o esperar a que entren tus amigos." : `${playersCount} jugadores en la sala.`}</p>
       </div>
 
-      <div className="grid grid-cols-3 gap-2" role="tablist">
-        {MODES.map((m) => (
-          <button
-            key={m.id}
-            role="tab"
-            aria-selected={mode === m.id}
-            onClick={() => { setMode(m.id); setSelected(null); }}
-            className={`rounded-xl border-[3px] border-ink px-3 py-3 text-left transition-[transform,box-shadow] duration-75 ${mode === m.id ? "translate-y-[3px] bg-stage text-paper shadow-[0_1px_0_var(--color-ink)]" : "bg-paper shadow-[0_4px_0_var(--color-ink)] hover:bg-fog"}`}
-          >
-            <span className="display block text-lg">{m.label}</span>
-            <span className={`hidden text-xs font-bold sm:block ${mode === m.id ? "text-paper/80" : "text-muted"}`}>{m.hint}</span>
-          </button>
-        ))}
+      <div>
+        <p className="mb-1.5 font-extrabold">Categorías listas</p>
+        <div className="flex flex-wrap gap-2">
+          {CATEGORIES.map((c) => (
+            <button
+              key={c.slug}
+              onClick={() => pickCategory(c)}
+              disabled={loadingCat !== null}
+              className={`rounded-xl border-[3px] border-ink px-3 py-1.5 font-extrabold shadow-[0_3px_0_var(--color-ink)] transition-[transform,box-shadow] duration-75 active:translate-y-[2px] active:shadow-[0_1px_0_var(--color-ink)] ${c.color} ${selected?.name === c.label ? "ring-4 ring-ink/25" : ""}`}
+            >
+              {loadingCat === c.slug ? "Buscando…" : c.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-1.5 font-extrabold">O busca tu propia música</p>
+        <div className="grid grid-cols-3 gap-2" role="tablist">
+          {MODES.map((m) => (
+            <button
+              key={m.id}
+              role="tab"
+              aria-selected={mode === m.id}
+              onClick={() => { setMode(m.id); setSelected(null); if (m.id === "artist") setTarget("song"); }}
+              className={`rounded-xl border-[3px] border-ink px-3 py-3 text-left transition-[transform,box-shadow] duration-75 ${mode === m.id ? "translate-y-[3px] bg-stage text-paper shadow-[0_1px_0_var(--color-ink)]" : "bg-paper shadow-[0_4px_0_var(--color-ink)] hover:bg-fog"}`}
+            >
+              <span className="display block text-lg">{m.label}</span>
+              <span className={`hidden text-xs font-bold sm:block ${mode === m.id ? "text-paper/80" : "text-muted"}`}>{m.hint}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {mode === "genre" && <GenrePicker selected={selected} onSelect={setSelected} />}
       {mode === "playlist" && <SearchPicker key="playlist" type="playlist" ideas={PLAYLIST_IDEAS} selected={selected} onSelect={setSelected} />}
       {mode === "artist" && <SearchPicker key="artist" type="artist" ideas={ARTIST_IDEAS} selected={selected} onSelect={setSelected} />}
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Segmented
+          label="Qué adivinar"
+          value={mode === "artist" ? "song" : target}
+          onChange={setTarget}
+          options={[{ id: "song", label: "Canción" }, { id: "artist", label: "Artista", disabled: mode === "artist" }]}
+        />
+        <Segmented
+          label="Cómo responder"
+          value={answerMode}
+          onChange={setAnswerMode}
+          options={[{ id: "choice", label: "Opciones" }, { id: "typed", label: "Escribiendo" }]}
+        />
+        <Segmented
+          label="Fragmento"
+          value={randomStart}
+          onChange={setRandomStart}
+          options={[{ id: "start", label: "Desde el inicio" }, { id: "random", label: "Parte al azar" }]}
+        />
+      </div>
+      {answerMode === "typed" && (
+        <p className="-mt-2 text-sm font-bold text-muted">Escribiendo es más difícil: tienes 3 intentos y se perdonan errores pequeños de ortografía.</p>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <label className="font-extrabold">Rondas
