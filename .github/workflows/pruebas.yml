@@ -22,7 +22,7 @@ jobs:
       - name: Lint
         run: npm run lint
       - name: Tipos
-        run: npx tsc --noEmit
+        run: npx next typegen && npx tsc --noEmit
       - name: Pruebas unitarias y de componentes
         run: npx vitest run --project unit --reporter=default --reporter=github-actions
       - name: Compilación de producción

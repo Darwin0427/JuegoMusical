@@ -26,6 +26,7 @@ test.describe("Multijugador de punta a punta", () => {
     await setupGame(host.page, { categoria: "Reguetón", rondas: "5", segundos: "10" });
 
     // La sala y las rondas quedan en la base; los fragmentos de Deezer son válidos y frescos
+    await expect(host.page.locator("button.buzzer").first()).toBeVisible({ timeout: 30_000 }); // el servidor ya armó la partida
     const room = (await rest(`rooms?code=eq.${code}&select=id,status,total_rounds`)).body as { id: string; status: string; total_rounds: number }[];
     expect(room[0]).toMatchObject({ status: "playing", total_rounds: 5 });
     const rounds = (await rest(`rounds?room_id=eq.${room[0].id}&select=preview_url,options,correct_index`)).body as { preview_url: string; options: unknown[]; correct_index: number | null }[];
@@ -110,11 +111,11 @@ test.describe("Multijugador de punta a punta", () => {
     await otro.page.getByLabel("Tu apodo").fill("darwin");
     await otro.page.getByLabel("Código de sala").fill("ZZZZZ");
     await otro.page.getByRole("button", { name: "Entrar" }).first().click();
-    await expect(otro.page.getByRole("alert")).toHaveText(/No existe una sala con ese código/);
+    await expect(otro.page.locator("p[role=alert]")).toHaveText(/No existe una sala con ese código/); // (Next.js tiene otro role=alert invisible)
 
     await otro.page.getByLabel("Código de sala").fill(code);
     await otro.page.getByRole("button", { name: "Entrar" }).first().click();
-    await expect(otro.page.getByRole("alert")).toHaveText(/Ya hay alguien con ese apodo/);
+    await expect(otro.page.locator("p[role=alert]")).toHaveText(/Ya hay alguien con ese apodo/);
 
     await otro.page.goto("/sala/ZZZZZ");
     await expect(otro.page.getByText("No existe la sala ZZZZZ")).toBeVisible();

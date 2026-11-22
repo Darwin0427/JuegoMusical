@@ -13,7 +13,7 @@ test("escribiendo con buscador: sugerencias reales de Deezer, intentos y lo que 
   await createRoom(host);
   await setupGame(host.page, { categoria: "Pop en inglés", adivinar: "Artista", responder: "Escribiendo", rondas: "5", segundos: "30" });
 
-  const box = host.page.getByRole("combobox");
+  const box = host.page.locator("#guess"); // (en la sala de espera también hay listas desplegables)
   await expect(box).toBeEnabled({ timeout: 30_000 });
   await expect(host.page.getByText("¿Quién canta?").first()).toBeVisible();
   await expect(host.page.locator("button.buzzer")).toHaveCount(0); // sin opciones
