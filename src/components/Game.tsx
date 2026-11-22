@@ -36,7 +36,10 @@ export default function Game({
     const due = phase === "closing" || (phase === "reveal" && revealedAt !== null && now >= revealedAt + REVEAL_MS);
     if (!due || Date.now() - lastAdvance.current < 1200) return;
     lastAdvance.current = Date.now();
-    supabase.rpc("advance", { p_token: session.token });
+    // Ojo: las consultas de supabase-js no se envían hasta que se espera la promesa
+    supabase.rpc("advance", { p_token: session.token }).then(({ error }) => {
+      if (error) console.error("advance", error.message);
+    });
   }, [phase, now, revealedAt, session.token]);
 
   // Audio: cargar el fragmento de cada ronda y sonar al mismo tiempo para todos
@@ -109,8 +112,8 @@ export default function Game({
           {(phase === "playing" || phase === "closing") && (
             <>
               <div className="eq" aria-hidden><span /><span /><span /><span /><span /></div>
-              <p className="tabular text-3xl font-black">{Math.ceil(left / 1000)} s</p>
-              <p className="text-muted">{myChoice !== null ? "Respuesta enviada. Esperando a los demás…" : room.source_type === "artist" ? "¿Qué canción es?" : "¿Qué canción suena?"}</p>
+              <p className="tabular text-3xl font-black">{phase === "closing" ? "¡Tiempo!" : `${Math.ceil(left / 1000)} s`}</p>
+              <p className="text-muted">{phase === "closing" ? "Revelando la respuesta…" : myChoice !== null ?"Respuesta enviada. Esperando a los demás…" : room.source_type === "artist" ? "¿Qué canción es?" : "¿Qué canción suena?"}</p>
             </>
           )}
           {phase === "reveal" && round.answer && (
