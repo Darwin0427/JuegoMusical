@@ -1,0 +1,84 @@
+name: Pruebas
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: pruebas-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unitarias:
+    name: Unitarias y componentes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Tipos
+        run: npx tsc --noEmit
+      - name: Pruebas unitarias y de componentes
+        run: npx vitest run --project unit --reporter=default --reporter=github-actions
+      - name: Compilación de producción
+        run: npm run build
+
+  base-de-datos:
+    name: Base de datos (reglas del juego y permisos)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env: { POSTGRES_PASSWORD: postgres }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Pruebas de base de datos con las migraciones reales
+        run: npx vitest run --project db --reporter=default --reporter=github-actions
+
+  punta-a-punta:
+    name: Punta a punta (multijugador con navegadores reales)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - uses: supabase/setup-cli@v1
+        with: { version: latest }
+      - name: Supabase local (Postgres + API + Realtime) con las migraciones
+        run: supabase start -x studio,imgproxy,mailpit,edge-runtime,logflare,vector,supavisor,storage-api,postgres-meta
+      - name: Variables del Supabase local
+        run: |
+          supabase status -o env > /tmp/sb.env
+          set -a; source /tmp/sb.env; set +a
+          echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$ANON_KEY" >> "$GITHUB_ENV"
+      - name: Compilar la app apuntando al Supabase local
+        run: npm run build
+        env: { NEXT_PUBLIC_E2E: "1" }
+      - name: Navegador Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Pruebas de punta a punta
+        run: npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: informe-playwright
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7

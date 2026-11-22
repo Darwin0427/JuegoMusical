@@ -18,6 +18,8 @@ export function useGameAudio(url: string) {
       a = new Audio();
       a.preload = "auto";
       audioRef.current = a;
+      // Solo en compilaciones de prueba: deja ver el audio a las pruebas de punta a punta
+      if (process.env.NEXT_PUBLIC_E2E === "1") (window as unknown as { __jmAudio?: HTMLAudioElement }).__jmAudio = a;
     }
     a.pause();
     pending.current = false;

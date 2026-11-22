@@ -31,3 +31,10 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 ```
 El esquema de la base de datos está en `supabase/migrations/`.
+
+## Pruebas
+| Nivel | Qué cubre | Cómo correrlo |
+|---|---|---|
+| Unitarias y componentes (Vitest + Testing Library) | Armado de rondas, Deezer, títulos, categorías, sesión, audio, rutas `/api`, inicio, sala, juego, buscador, resultados | `npm test` |
+| Base de datos (Vitest + Postgres) | Todas las reglas del juego en SQL con las migraciones reales: salas, permisos, puntos, rachas, modo escribir, multijugador completo | `source scripts/local-postgres.sh && npm run test:db` |
+| Punta a punta (Playwright) | Varios navegadores jugando contra Supabase local + Deezer real, tiempo real, audio, seguridad de la API, celular | En GitHub Actions (`.github/workflows/pruebas.yml`) |
