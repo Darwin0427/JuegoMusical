@@ -29,11 +29,26 @@ export async function getGenres() {
     .map((g) => ({ id: String(g.id), name: g.name, picture: g.picture_medium }));
 }
 
-export async function search(type: "artist" | "playlist", q: string) {
-  const path = `/search/${type}?q=${encodeURIComponent(q)}&limit=12`;
+export type SearchType = "artist" | "playlist" | "track";
+
+export async function search(type: SearchType, q: string, limit = 12) {
+  const path = `/search/${type}?q=${encodeURIComponent(q)}&limit=${limit}`;
   if (type === "artist") {
     const r = await dz<{ data: { id: number; name: string; picture_medium: string; nb_fan: number }[] }>(path, 600);
     return r.data.map((a) => ({ id: String(a.id), name: a.name, picture: a.picture_medium, extra: `${a.nb_fan.toLocaleString("es-CO")} fans` }));
+  }
+  if (type === "track") {
+    // Sugerencias del buscador de respuestas: todo el catálogo, sin duplicados de título+artista
+    const r = await dz<{ data: DzTrack[] }>(path, 600);
+    const seen = new Set<string>();
+    return r.data
+      .map((t) => ({ id: String(t.id), name: tidyTitle(t.title_short || t.title), picture: t.album?.cover_medium ?? "", extra: t.artist.name }))
+      .filter((t) => {
+        const k = norm(t.name) + "|" + norm(t.extra);
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
   }
   const r = await dz<{ data: { id: number; title: string; picture_medium: string; nb_tracks: number; user?: { name: string } }[] }>(path, 600);
   return r.data.map((p) => ({ id: String(p.id), name: p.title, picture: p.picture_medium, extra: `${p.nb_tracks} canciones · ${p.user?.name ?? ""}` }));

@@ -11,6 +11,7 @@ import SoloStats from "./SoloStats";
 import { useSfx, useVolume } from "@/lib/prefs";
 import { playSfx } from "@/lib/sfx";
 import { Check, Cross, Flame, Speaker } from "./ui/Icons";
+import AnswerSearch from "./AnswerSearch";
 
 const REVEAL_MS = 5000;
 
@@ -122,9 +123,8 @@ export default function Game({
     [mine, phase, round.id, now, startsAt, session.token],
   );
 
-  async function submitGuess(e: React.FormEvent) {
-    e.preventDefault();
-    const text = guessText.trim();
+  async function submitGuess(raw: string) {
+    const text = raw.trim();
     if (!text || sending || typedDone || phase !== "playing") return;
     setSending(true);
     const ms = Math.max(0, now - startsAt);
@@ -269,25 +269,17 @@ export default function Game({
               </ul>
             </div>
           ) : (
-            <form onSubmit={submitGuess} className="panel flex flex-col gap-3 p-4">
-              <label htmlFor="guess" className="display text-xl">{isArtist ? "Escribe el artista" : "Escribe el nombre de la canción"}</label>
-              <div className="flex gap-2">
-                <input
-                  id="guess"
-                  className={`input text-lg ${myTyped?.lastWrong && !typedDone ? "border-bad" : ""}`}
-                  autoComplete="off"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  maxLength={80}
-                  placeholder={typedDone ? "" : isArtist ? "Ej: Karol G" : "Ej: Tusa"}
-                  value={guessText}
-                  disabled={phase !== "playing" || typedDone}
-                  onChange={(e) => setGuess({ round: round.id, text: e.target.value })}
-                />
-                <button className="btn-primary shrink-0" disabled={phase !== "playing" || typedDone || sending || !guessText.trim()}>
-                  {sending ? "…" : "Responder"}
-                </button>
-              </div>
+            <div className="panel flex flex-col gap-3 p-4">
+              <label htmlFor="guess" className="display text-xl">{isArtist ? "¿Quién canta? Búscalo" : "¿Qué canción es? Búscala"}</label>
+              <AnswerSearch
+                value={guessText}
+                onChange={(text) => setGuess({ round: round.id, text })}
+                onSubmit={submitGuess}
+                target={isArtist ? "artist" : "song"}
+                disabled={phase !== "playing" || typedDone}
+                invalid={!!myTyped?.lastWrong && !typedDone}
+                busy={sending}
+              />
               <p className={`text-sm font-extrabold ${myTyped?.correct ? "text-ok" : myTyped?.lastWrong ? "text-bad" : "text-muted"}`} aria-live="polite">
                 {myTyped?.correct
                   ? "¡Correcto! Espera a que se revele para ver tus puntos."
@@ -295,9 +287,9 @@ export default function Game({
                     ? myTyped.left > 0
                       ? `“${myTyped.lastWrong}” no es. Te quedan ${myTyped.left} intento${myTyped.left === 1 ? "" : "s"}.`
                       : `“${myTyped.lastWrong}” tampoco era. Ya no te quedan intentos.`
-                    : "Tienes 3 intentos. No importan las tildes ni errores pequeños."}
+                    : "Escribe parte del nombre y elige de la lista. Tienes 3 intentos."}
               </p>
-            </form>
+            </div>
           )
         ) : (
         <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
